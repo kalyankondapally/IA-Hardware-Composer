@@ -41,6 +41,7 @@ bool EGLOffScreenContext::Init() {
                                           EGL_NONE};
 
   egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+
   if (egl_display_ == EGL_NO_DISPLAY) {
     ETRACE("Failed to get egl display");
     return false;

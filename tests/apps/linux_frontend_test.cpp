@@ -153,6 +153,15 @@ static uint64_t arg_frames = 0;
  */
 static bool enable_hybrid_mode = 0;
 
+/*Preferred device for Offscreen Rendering i.e 0 - 64
+ */
+static uint32_t preferred_offscreen_device = 0;
+
+/*Preferred device for Scanout i.e 0 - 64
+ */
+static uint32_t preferred_scanout_device = 0;
+
+
 /*flag set to test displaymode*/
 static int display_mode;
 int force_mode = 0, config_index = 0, print_display_config = 0;
@@ -193,9 +202,10 @@ struct frame {
 };
 
 struct device_info {
-char *card_node;
-char *render_node;
-uint32_t is_discrete;
+char* card_node = NULL;
+char* render_node = NULL;
+uint32_t is_discrete = false;
+uint32_t device_id = 0;
 };
 
 bool init_gl() {
@@ -701,19 +711,18 @@ print_device_info(drmDevicePtr device, int i, bool print_revision)
     printf("\n");
 }
 
-static void scan_devices(struct device_info* render_device, struct device_info* scanout_device)
+static void print_all_devices()
 {
-#define MAX_DRM_DEVICES 64
+   #define MAX_DRM_DEVICES 64
    drmDevicePtr devices[MAX_DRM_DEVICES], device;
    int i, ret, num_devices, fd = -1;
+   int drm_node = DRM_NODE_RENDER;
 
    num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
-	if (num_devices < 0) {
-		fprintf(stderr,
-			"drmGetDevices2() returned an error %d\n",
-			num_devices);
-		return;
-	}
+   if (num_devices < 0) {
+     fprintf(stderr, "drmGetDevices2() returned an error %d\n", num_devices);
+     return;
+    }
 
 
    for (i = 0; i < num_devices; i++) {
@@ -752,6 +761,103 @@ static void scan_devices(struct device_info* render_device, struct device_info* 
        drmFreeDevices(devices, ret);
  }
 
+static void populate_node_info(struct device_info* device_info, drmDevicePtr device, uint32_t device_no)
+{
+   int drm_node = DRM_NODE_RENDER;
+	// Check if this device has available render node.
+	if (device->available_nodes & 1 << drm_node) {
+	  const char *device_name = device->nodes[drm_node];
+	  device_info->render_node = new char[strlen(device_name) + 1]{};
+          std::copy(device_name, device_name + strlen(device_name), device_info->render_node);
+	}
+
+	drm_node = DRM_NODE_PRIMARY;
+	// Check if this device has available card node.
+	if (device->available_nodes & 1 << drm_node) {
+	  const char *device_name = device->nodes[drm_node];
+	  device_info->card_node = new char[strlen(device_name) + 1]{};
+          std::copy(device_name, device_name + strlen(device_name), device_info->card_node);
+	}
+
+	// Check if this device is discrete
+	device_info->is_discrete = false; // TODO: Fix This.
+
+	device_info->device_id = device_no;
+
+}
+
+static void finalize_preferred_devices(struct device_info* render_device, struct device_info* scanout_device)
+{
+   #define MAX_DRM_DEVICES 64
+   drmDevicePtr devices[MAX_DRM_DEVICES], device;
+   int i, ret, num_devices, fd = -1;
+
+   num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
+   if (num_devices < 0) {
+     fprintf(stderr, "drmGetDevices2() returned an error %d\n", num_devices);
+     return;
+    }
+
+    // Reset preferred_offscreen_device to first available device in case it's invalid.
+    if (preferred_offscreen_device > num_devices) {
+      preferred_offscreen_device = 0;
+    }
+
+    // Reset preferred_offscreen_device to first available device in case it's invalid.
+    if (preferred_scanout_device > num_devices) {
+      preferred_scanout_device = 0;
+    }
+
+	device = devices[preferred_offscreen_device];
+	/* Skip Non Intel GPU for now*/
+	if (device->deviceinfo.pci->vendor_id != 0x8086) {
+	  printf("--- Resetting preffered offscreen device ---\n");
+	  for (i = 0; i < num_devices; i++) {
+            device = devices[i];
+
+	    /* Skip Non Intel GPU for now*/
+	    if (device->deviceinfo.pci->vendor_id != 0x8086) {
+	      continue;
+	    }
+
+	    // Found Intel GPU break.
+	    preferred_offscreen_device = i;
+	    break;
+	  }
+	}
+
+
+	populate_node_info(render_device, device, preferred_offscreen_device);
+        printf("Choose the following for Offscreen Rendering:");
+        print_device_info(device, preferred_offscreen_device, false);
+
+	// Get Scanout Device Information
+	device = devices[preferred_scanout_device];
+
+	/* Skip Non Intel GPU for now*/
+	if (device->deviceinfo.pci->vendor_id != 0x8086) {
+	  printf("--- Resetting preffered offscreen device ---\n");
+	  for (i = 0; i < num_devices; i++) {
+            device = devices[i];
+
+	    /* Skip Non Intel GPU for now*/
+	    if (device->deviceinfo.pci->vendor_id != 0x8086) {
+	      continue;
+	    }
+
+	    // Found Intel GPU break.
+	    preferred_scanout_device = i;
+	    break;
+	  }
+	}
+
+	populate_node_info(scanout_device, device, preferred_scanout_device);
+        printf("Choose the following for Scanout Device:");
+        print_device_info(device, preferred_scanout_device, false);
+
+       drmFreeDevices(devices, ret);
+ }
+
 
 int main(int argc, char *argv[]) {
   int ret, fd, primary_width, primary_height;
@@ -762,7 +868,8 @@ int main(int argc, char *argv[]) {
   uint num_configs;
   uint32_t *configs, preferred_config;
   int32_t kms_fence = -1;
-  struct device_info* render_device, scanout_device = NULL;
+  device_info* render_device;
+  device_info* scanout_device;
 
   setup_tty();
 
@@ -832,12 +939,13 @@ int main(int argc, char *argv[]) {
 
   parse_args(argc, argv);
 
-  render_device = new struct device_info();
-  scanout_device = new struct device_info();
+  render_device = new device_info;
+  scanout_device = new device_info;
 
-  scan_devices(render_device, scanout_device);
+  finalize_preferred_devices(render_device, scanout_device);
+  print_all_devices();
 
-  fd = open("/dev/dri/renderD128", O_RDWR);
+  fd = open(render_device->render_node ? render_device->render_node : render_device->card_node, O_RDWR);
   if (fd == -1) {
     ETRACE("Can't open GPU file");
     exit(-1);
