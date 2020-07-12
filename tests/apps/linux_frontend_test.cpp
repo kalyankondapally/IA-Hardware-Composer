@@ -823,7 +823,7 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
              fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 
           if (fd == -1 && errno == EACCES) {
-            ETRACE("failed to open %s: %s\n", "/dev/dri/renderD128", strerror(errno));
+            ETRACE("failed to open %s: %s\n", device->nodes[drm_node], strerror(errno));
             exit(-1);
           }
 
@@ -1092,14 +1092,9 @@ int main(int argc, char *argv[]) {
 
   int64_t gpu_fence_fd = -1; /* out-fence from gpu, in-fence to kms */
   uint32_t frame_total = 0;
-
+  uint32_t in_use_frame = 0;
   for (uint64_t i = 0; arg_frames == 0 || i < arg_frames; ++i) {
-    struct frame *frame = &frames[i % ARRAY_SIZE(frames)];
-    if (kms_fence != -1) {
-      sync_wait(kms_fence, -1);
-      close(kms_fence);
-      kms_fence = -1;
-    }
+    struct frame *frame = &frames[in_use_frame];
 
     for (uint32_t j = 0; j < frame->layers.size(); j++) {
       frame->layers_fences[j].clear();
@@ -1118,8 +1113,17 @@ int main(int argc, char *argv[]) {
                                   frame->layer_bos[j]);
     }
 
+    if (kms_fence != -1) {
+      sync_wait(kms_fence, -1);
+      close(kms_fence);
+      kms_fence = -1;
+    }
     backend->iahwc_present_display(iahwc_device, 0, &kms_fence);
     frame_total++;
+    in_use_frame++;
+    if (in_use_frame > 1) {
+      in_use_frame = 0;
+    }
   }
 
   release_device(render_device);
