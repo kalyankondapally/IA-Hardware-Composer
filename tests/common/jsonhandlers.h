@@ -225,7 +225,7 @@ typedef struct {
   uint32_t frame_y;
   uint32_t frame_width;
   uint32_t frame_height;
-  uint32_t prefer_render_device = 1;
+  uint32_t prefer_device = 1; // 0 = scanout device, 1 = render device, 2 = media device
 } LAYER_PARAMETER;
 
 typedef std::vector<LAYER_PARAMETER> LAYER_PARAMETERS;

@@ -151,14 +151,28 @@ err_close:
  */
 static uint64_t arg_frames = 0;
 
-/*Preferred device for Offscreen 3d Rendering i.e 0 - 64
+/* Set hybrid mode to true or false. In this case we will search for all available devices on the
+ * system and choose one which is not used for Scanout on which this application is being presented.
+ * Media and 3D will use the same device for offscreen rendering.
  */
-static uint32_t preferred_offscreen_3d_device = 0;
+static uint32_t hybrid_mode = 0;
 
-/*Preferred device for Offscreen Media Rendering i.e 0 - 64
+/* Set hybrid mode to true or false. In this case we will search for all available devices on the
+ * system and choose one which is not used for Scanout on which this application is being presented.
+ * Media will use this device for offscreen rendering. 3D will use the same device as
+ * Scanout device for offscreen rendering
  */
-static uint32_t preferred_offscreen_media_device = 0;
+static uint32_t hybrid_mode_media = 0;
 
+/* Set hybrid mode to true or false. In this case we will search for all available devices on the
+ * system and choose one which is not used for Scanout on which this application is being presented.
+ * 3D will use this device for offscreen rendering. Media will use the same device as
+ * Scanout device for offscreen rendering
+ */
+static uint32_t hybrid_mode_3d = 0;
+
+/*Preferred device for scanout i.e 0 - 64. Will be provided by the system compositor
+ */
 static int preferred_scanout_device = -1;
 
 
@@ -477,7 +491,7 @@ static void fill_hwclayer(iahwc_layer_t layer_handle_,
        pParameter->frame_height});
 }
 
-static void init_frames(int32_t width, int32_t height, struct device_info* render_device, const struct device_info* media_device) {
+static void init_frames(int32_t width, int32_t height, struct device_info* render_device, struct device_info* media_device, struct device_info* scanout_device) {
   size_t LAYER_PARAM_SIZE;
   if (display_mode) {
     layer_parameter.type = static_cast<LAYER_TYPE>(0);
@@ -529,13 +543,20 @@ static void init_frames(int32_t width, int32_t height, struct device_info* rende
     uint64_t modificators[4];
     uint32_t gbm_format =
         layerformat2gbmformat(layer_parameter.format, &usage_format, &usage);
+    struct device_info* gl_renderer = render_device;
 
     switch (layer_parameter.type) {
       case LAYER_TYPE_GL:
-        renderer = new GLCubeLayerRenderer(render_device->buffer_handler, false, render_device->device_no);
+        if (layer_parameter.prefer_device == 0) {
+          gl_renderer = scanout_device;
+        } else if (layer_parameter.prefer_device == 2) {
+          gl_renderer = media_device;
+        }
+
+        renderer = new GLCubeLayerRenderer(gl_renderer->buffer_handler, false, gl_renderer->device_no);
         if (!renderer->Init(layer_parameter.source_width,
                             layer_parameter.source_height, gbm_format, usage_format,
-                            usage, &render_device->gl, layer_parameter.resource_path.c_str())) {
+                            usage, &gl_renderer->gl, layer_parameter.resource_path.c_str())) {
           printf("\nrender init not successful\n");
           exit(-1);
         }
@@ -562,17 +583,17 @@ static void print_help(void) {
   printf(
       "usage: testjsonlayers [-h|--help] [-f|--frames <frames>] [-j|--json "
       "<jsonfile>] [-p|--powermode <on/off/doze/dozesuspend>][--displaymode "
-      "<print/forcemode displayconfigindex] [-r|--3d-renderer <device no[0-64]>] "
-      "[-m|--media-renderer <device no[0-64]>] [-s|--scanout <device no[0-64]>] \n");
+      "<print/forcemode displayconfigindex] [-r|--hybrid_mode_3d <option[0 or 1]>] "
+      "[-v|--hybrid_mode_media <option[0 or 1]>] [-m|--hybrid_mode <option[0 or 1]>] \n");
 }
 
 static void parse_args(int argc, char *argv[]) {
   static const struct option longopts[] = {
       {"help", no_argument, NULL, 'h'},
       {"frames", required_argument, NULL, 'f'},
-      {"3d-renderer", required_argument, NULL, 'r'},
-      {"media-renderer", required_argument, NULL, 'm'},
-      {"scanout", required_argument, NULL, 's'},
+      {"hybrid_mode_3d", required_argument, NULL, 'r'},
+      {"hybrid_mode_media", required_argument, NULL, 'v'},
+      {"hybrid_mode", required_argument, NULL, 'm'},
       {"json", required_argument, NULL, 'j'},
       {"log", required_argument, NULL, 'l'},
       {"displaymode", required_argument, &display_mode, 1},
@@ -587,7 +608,7 @@ static void parse_args(int argc, char *argv[]) {
   /* Suppress getopt's poor error messages */
   opterr = 0;
 
-  while ((opt = getopt_long(argc, argv, "+:hf:r:m:s:j:l:", longopts,
+  while ((opt = getopt_long(argc, argv, "+:hf:r:v:m:s:j:l:", longopts,
                             /*longindex*/ &longindex)) != -1) {
     switch (opt) {
       case 0:
@@ -611,42 +632,42 @@ static void parse_args(int argc, char *argv[]) {
         printf("optarg:%s\n", optarg);
         strcpy(json_path, optarg);
         break;
-    case 'r':
-      if (strlen(optarg) >= 2) {
-        printf("Device no should be in range of 0 - 64!\n");
-        exit(0);
-      }
-      printf("Device No used for Rendering:%s\n", optarg);
-      errno = 0;
-      preferred_offscreen_3d_device = strtoul(optarg, &endptr, 0);
-      if (errno || *endptr != '\0') {
-        fprintf(stderr, "usage error: invalid value for <preferred_offscreen_3d_device>\n");
-        exit(EXIT_FAILURE);
-      }
-      break;
     case 'm':
-      if (strlen(optarg) >= 2) {
-        printf("Device no should be in range of 0 - 64!\n");
+      if (strlen(optarg) > 1) {
+        printf("Pass 1 to enable Hybrid Mode or 0 to disable it!\n");
         exit(0);
       }
-      printf("Device No used for Media:%s\n", optarg);
+      printf("Preferred Hybrid Mode for Media and 3D:%s\n", optarg);
       errno = 0;
-      preferred_offscreen_media_device = strtoul(optarg, &endptr, 0);
+      hybrid_mode = strtoul(optarg, &endptr, 0);
       if (errno || *endptr != '\0') {
-        fprintf(stderr, "usage error: invalid value for <preferred_offscreen_media_device>\n");
+        fprintf(stderr, "usage error: invalid value for <hybrid_mode>\n");
         exit(EXIT_FAILURE);
       }
       break;
-    case 's':
-      if (strlen(optarg) >= 2) {
-        printf("Device no should be in range of 0 - 64!\n");
+    case 'v':
+      if (strlen(optarg) > 1) {
+        printf("Pass 1 to enable Hybrid Mode for Media or 0 to disable it!\n");
         exit(0);
       }
-      printf("Device No used for Scanout:%s\n", optarg);
+      printf("Preferred Hybrid Mode for Media:%s\n", optarg);
       errno = 0;
-      preferred_scanout_device = strtoul(optarg, &endptr, 0);
+      hybrid_mode_media = strtoul(optarg, &endptr, 0);
       if (errno || *endptr != '\0') {
-        fprintf(stderr, "usage error: invalid value for <preferred_scanout_device>\n");
+        fprintf(stderr, "usage error: invalid value for <hybrid_mode_media>\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
+    case 'r':
+      if (strlen(optarg) > 1) {
+        printf("Pass 1 to enable Hybrid Mode for 3D or 0 to disable it!\n");
+        exit(0);
+      }
+      printf("Preferred Hybrid Mode for 3D:%s\n", optarg);
+      errno = 0;
+      hybrid_mode_3d = strtoul(optarg, &endptr, 0);
+      if (errno || *endptr != '\0') {
+        fprintf(stderr, "usage error: invalid value for <hybrid_mode_3d>\n");
         exit(EXIT_FAILURE);
       }
       break;
@@ -807,7 +828,7 @@ static void print_all_devices()
        drmFreeDevices(devices, ret);
  }
 
-static void populate_node_info(struct device_info* device_info, drmDevicePtr device, uint32_t device_no, uint32_t scanout)
+static void populate_node_info(struct device_info* device_info, drmDevicePtr device, uint32_t device_no)
 {
    int drm_node = DRM_NODE_RENDER;
 	// Check if this device has available render node.
@@ -843,12 +864,14 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
 
 }
 
-static void finalize_preferred_devices(struct device_info* render_device, struct device_info* media_device)
+static void finalize_preferred_devices(struct device_info* render_device, struct device_info* media_device, struct device_info* scanout_device)
 {
    #define MAX_DRM_DEVICES 64
    drmDevicePtr devices[MAX_DRM_DEVICES], device;
    int i, ret, num_devices, fd = -1;
-
+   uint32_t hybrid_device_no = preferred_scanout_device;
+   uint32_t preferred_offscreen_3d_device = preferred_scanout_device;
+   uint32_t preferred_offscreen_media_device = preferred_scanout_device;
    num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
    if (num_devices < 0) {
      printf("drmGetDevices2() returned an error %d\n", num_devices);
@@ -857,66 +880,76 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
        printf("Total no of devices reported by drmGetDevices2() %d\n", num_devices);
    }
 
-    // Reset preferred_offscreen_3d_device to first available device in case it's invalid.
-    if (preferred_offscreen_3d_device >= num_devices) {
-      preferred_offscreen_3d_device = 0;
-    }
+   if (hybrid_mode || hybrid_mode_3d || hybrid_mode_media) {
+       for (i = 0; i < num_devices; i++) {
+         device = devices[i];
 
-    // Reset preferred_offscreen_media_device to first available device in case it's invalid.
-    if (preferred_offscreen_media_device >= num_devices) {
-      preferred_offscreen_media_device = 0;
-    }
+         /* Skip Non Intel GPU for now*/
+         if (device->deviceinfo.pci->vendor_id != 0x8086) {
+           continue;
+         }
 
-        device = devices[preferred_offscreen_3d_device];
-	/* Skip Non Intel GPU for now*/
-	if (device->deviceinfo.pci->vendor_id != 0x8086) {
-	  printf("--- Resetting preffered offscreen device ---\n");
-	  for (i = 0; i < num_devices; i++) {
-            device = devices[i];
+         // Skip scanout device in case we are in hybrid mode.
+         if (i == preferred_scanout_device) {
+           continue;
+         }
 
-	    /* Skip Non Intel GPU for now*/
-	    if (device->deviceinfo.pci->vendor_id != 0x8086) {
-	      continue;
-	    }
+         // Found Intel GPU break.
+         hybrid_device_no = i;
+         break;
+       }
+   }
 
-	    // Found Intel GPU break.
-            preferred_offscreen_3d_device = i;
-	    break;
-	  }
-	}
+   // Reset hybrid mode if we cannot support it.
+   if (hybrid_device_no == preferred_scanout_device) {
+     hybrid_mode = false;
+     hybrid_mode_3d = false;
+     hybrid_mode_media = false;
+   }
 
+   // If we are not in hybrid mode for 3D rendering than we prefer same device as scanout.
+   // FIXME: Eventually this should be dynamic setting based on Performane and Power data.
+   if (hybrid_mode || hybrid_mode_3d) {
+     preferred_offscreen_3d_device = hybrid_device_no;
+   }
 
-        populate_node_info(render_device, device, preferred_offscreen_3d_device, 0);
-        if (!init_gl(&render_device->gl,  render_device->buffer_handler->GetFd())) {
-          printf("Failed to initial EGLContext for Offscreen 3D Rendering");
-          exit(-1);
-        }
-        printf("Choose the following for Offscreen 3D Rendering:");
-        print_device_info(device, preferred_offscreen_3d_device, false);
+   device = devices[preferred_offscreen_3d_device];
+   populate_node_info(render_device, device, preferred_offscreen_3d_device);
+   if (!init_gl(&render_device->gl,  render_device->buffer_handler->GetFd())) {
+     printf("Failed to initial EGLContext for Offscreen 3D Rendering");
+     exit(-1);
+   }
 
-        // Get Media Renderer information
-        device = devices[preferred_offscreen_media_device];
-        /* Skip Non Intel GPU for now*/
-        if (device->deviceinfo.pci->vendor_id != 0x8086) {
-          printf("--- Resetting preffered offscreen device ---\n");
-          for (i = 0; i < num_devices; i++) {
-            device = devices[i];
+   printf("Choose the following for Offscreen 3D Rendering:");
+   print_device_info(device, preferred_offscreen_3d_device, false);
 
-            /* Skip Non Intel GPU for now*/
-            if (device->deviceinfo.pci->vendor_id != 0x8086) {
-              continue;
-            }
+   device = nullptr;
 
-            // Found Intel GPU break.
-            preferred_offscreen_media_device = i;
-            break;
-          }
-        }
+   // Get Media Renderer information
+   // If we are not in hybrid mode for Media rendering than we prefer same device as scanout.
+   // FIXME: Eventually this should be dynamic setting based on Performane and Power data.
+   if (hybrid_mode || hybrid_mode_media) {
+     preferred_offscreen_media_device = hybrid_device_no;
+   }
 
-        populate_node_info(media_device, device, preferred_offscreen_media_device, 0);
-        printf("Choose the following for Offscreen Media Rendering:");
-        print_device_info(device, preferred_offscreen_media_device, false);
-       drmFreeDevices(devices, ret);
+   device = devices[preferred_offscreen_media_device];
+   populate_node_info(media_device, device, preferred_offscreen_media_device);
+   printf("Choose the following for Offscreen Media Rendering:");
+   print_device_info(device, preferred_offscreen_media_device, false);
+
+   // Open render node associated with Scanout device in case layers want to be prepared
+   // using that device.
+   device = devices[preferred_scanout_device];
+   populate_node_info(scanout_device, device, preferred_scanout_device);
+   if (!init_gl(&scanout_device->gl,  scanout_device->buffer_handler->GetFd())) {
+     printf("Failed to initial EGLContext for Offscreen 3D Rendering");
+     exit(-1);
+   }
+
+   printf("Choose the following for Offscreen 3D Rendering:");
+   print_device_info(device, preferred_scanout_device, false);
+
+   drmFreeDevices(devices, ret);
  }
 
 static void release_device(struct device_info* device_info)
@@ -936,6 +969,7 @@ int main(int argc, char *argv[]) {
   uint32_t *configs, preferred_config;
   device_info* render_device;
   device_info* media_device;
+  device_info* scanout_device;
 
   setup_tty();
 
@@ -956,8 +990,20 @@ int main(int argc, char *argv[]) {
   // Initialize preferred devices for 3D or Media Rendering Needs
   render_device = new device_info;
   media_device = new device_info;
+  scanout_device = new device_info;
 
-  finalize_preferred_devices(render_device, media_device);
+  finalize_preferred_devices(render_device, media_device, scanout_device);
+  ETRACE("Hybrid Configuration: \n");
+  if (hybrid_mode) {
+    ETRACE("Hybrid Mode for 3D and Media using Device No %d \n", render_device->device_no);
+  } else if (hybrid_mode_3d) {
+    ETRACE("Hybrid Mode for 3D using Device No %d \n", render_device->device_no);
+  } else if (hybrid_mode_media) {
+    ETRACE("Hybrid Mode for Media using Device No %d \n", media_device->device_no);
+  } else {
+    ETRACE("Hybrid Mode not enabled. Using Device No %d for everything. \n", media_device->device_no);
+  }
+
   print_all_devices();
 
   backend->iahwc_module = iahwc_module;
@@ -1049,7 +1095,7 @@ int main(int argc, char *argv[]) {
   printf("Width of primary display is %d height of the primary display is %d\n",
          primary_width, primary_height);
 
-  init_frames(primary_width, primary_height, render_device, media_device);
+  init_frames(primary_width, primary_height, render_device, media_device, scanout_device);
 
   int64_t gpu_fence_fd = -1; /* out-fence from gpu, in-fence to kms */
   uint32_t frame_total = 0;
