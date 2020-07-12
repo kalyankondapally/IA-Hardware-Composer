@@ -38,6 +38,8 @@
 
 // clang-format off
 #include "esUtil.h"
+
+#include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2ext.h>
 // clang-format on
@@ -208,7 +210,7 @@ uint32_t is_discrete = false;
 uint32_t device_id = 0;
 };
 
-bool init_gl(glContext* gl) {
+bool init_gl(glContext* gl, int device_fd) {
 
 #define get_proc(name, proc)                  \
   do {                                        \
@@ -225,7 +227,7 @@ bool init_gl(glContext* gl) {
   get_proc(eglDupNativeFenceFDANDROID, PFNEGLDUPNATIVEFENCEFDANDROIDPROC);
   get_proc(glEGLImageTargetTexture2DOES, PFNGLEGLIMAGETARGETTEXTURE2DOESPROC);
   get_proc(eglDestroyImageKHR, PFNEGLDESTROYIMAGEKHRPROC);
-  get_proc(eglGetPlatformDisplay, PFNEGLGETPLATFORMDISPLAYEXTPROC);
+  get_proc(eglGetPlatformDisplay, PFNEGLGETPLATFORMDISPLAYPROC);
 
   EGLint major, minor, n;
   static const EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3,
@@ -234,7 +236,9 @@ bool init_gl(glContext* gl) {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  gl->display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+  const EGLAttrib display_attrib[] = { EGL_DRM_MASTER_FD_EXT, device_fd, EGL_NONE };
+
+  gl->display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, display_attrib);
 
 
   if (!eglInitialize(gl->display, &major, &minor)) {
@@ -819,6 +823,13 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
             ETRACE("Can't open GPU file %s \n", device_info->render_node);
             exit(-1);
           }
+          if (fd != -1)
+             fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+
+          if (fd == -1 && errno == EACCES) {
+            ETRACE("failed to open %s: %s\n", "/dev/dri/renderD128", strerror(errno));
+            exit(-1);
+          }
 
           device_info->buffer_handler = hwcomposer::NativeBufferHandler::CreateInstance(fd);
 
@@ -837,6 +848,14 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
           int fd = open(device_info->card_node, O_RDWR);
           if (fd == -1) {
             ETRACE("Can't open GPU file %s \n", device_info->card_node);
+            exit(-1);
+          }
+
+          if (fd != -1)
+             fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+
+          if (fd == -1 && errno == EACCES) {
+            ETRACE("failed to open %s: %s\n", "/dev/dri/renderD128", strerror(errno));
             exit(-1);
           }
 
@@ -904,7 +923,7 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 
 
         populate_node_info(render_device, device, preferred_offscreen_3d_device, 0);
-        if (!init_gl(&render_device->gl)) {
+        if (!init_gl(&render_device->gl,  render_device->buffer_handler->GetFd())) {
           printf("Failed to initial EGLContext for Offscreen 3D Rendering");
           exit(-1);
         }
@@ -956,7 +975,7 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 	}
 
         populate_node_info(scanout_device, device, preferred_scanout_device, 1);
-        if (!init_gl(&scanout_device->gl)) {
+        if (!init_gl(&scanout_device->gl, render_device->buffer_handler->GetFd())) {
           printf("Failed to initial EGLContext for Offscreen 3D Rendering");
           exit(-1);
         }

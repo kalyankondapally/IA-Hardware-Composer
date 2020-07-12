@@ -18,6 +18,10 @@
 
 #include "hwctrace.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 namespace hwcomposer {
 
 EGLOffScreenContext::EGLOffScreenContext()
@@ -39,8 +43,18 @@ bool EGLOffScreenContext::Init() {
 
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
+  int fd = open("/dev/dri/renderD128", O_RDWR);
+  if (fd != -1)
+     fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 
-  egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+  if (fd == -1 && errno == EACCES) {
+    ETRACE("failed to open %s: %s\n", "/dev/dri/renderD128", strerror(errno));
+  }
+
+  const EGLAttrib display_attrib[] = { EGL_DRM_MASTER_FD_EXT, fd, EGL_NONE };
+
+  egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, display_attrib);
+  close(fd);
 
   if (egl_display_ == EGL_NO_DISPLAY) {
     ETRACE("Failed to get egl display");
