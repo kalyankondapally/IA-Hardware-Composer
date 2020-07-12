@@ -153,9 +153,13 @@ static uint64_t arg_frames = 0;
  */
 static bool enable_hybrid_mode = 0;
 
-/*Preferred device for Offscreen Rendering i.e 0 - 64
+/*Preferred device for Offscreen 3d Rendering i.e 0 - 64
  */
-static uint32_t preferred_offscreen_device = 0;
+static uint32_t preferred_offscreen_3d_device = 0;
+
+/*Preferred device for Offscreen Media Rendering i.e 0 - 64
+ */
+static uint32_t preferred_offscreen_media_device = 0;
 
 /*Preferred device for Scanout i.e 0 - 64
  */
@@ -204,6 +208,7 @@ struct frame {
 struct device_info {
 char* card_node = NULL;
 char* render_node = NULL;
+hwcomposer::NativeBufferHandler *buffer_handler = NULL;
 uint32_t is_discrete = false;
 uint32_t device_id = 0;
 };
@@ -268,7 +273,6 @@ static struct frame frames[2];
 char json_path[1024];
 char log_path[1024];
 TEST_PARAMETERS test_parameters;
-hwcomposer::NativeBufferHandler *buffer_handler;
 
 static uint32_t layerformat2gbmformat(LAYER_FORMAT format,
                                       uint32_t *usage_format, uint32_t *usage) {
@@ -473,7 +477,7 @@ static void fill_hwclayer(iahwc_layer_t layer_handle_,
        pParameter->frame_height});
 }
 
-static void init_frames(int32_t width, int32_t height) {
+static void init_frames(int32_t width, int32_t height, const struct device_info* render_device, const struct device_info* media_device, const struct device_info* scanout_device) {
   size_t LAYER_PARAM_SIZE;
   if (display_mode) {
     layer_parameter.type = static_cast<LAYER_TYPE>(0);
@@ -528,7 +532,7 @@ static void init_frames(int32_t width, int32_t height) {
 
     switch (layer_parameter.type) {
       case LAYER_TYPE_GL:
-        renderer = new GLCubeLayerRenderer(buffer_handler, false);
+        renderer = new GLCubeLayerRenderer(render_device->buffer_handler, false);
         break;
       default:
         printf("un-recognized layer type!\n");
@@ -559,13 +563,17 @@ static void print_help(void) {
   printf(
       "usage: testjsonlayers [-h|--help] [-f|--frames <frames>] [-j|--json "
       "<jsonfile>] [-p|--powermode <on/off/doze/dozesuspend>][--displaymode "
-      "<print/forcemode displayconfigindex]\n");
+      "<print/forcemode displayconfigindex] [-r|--3d-renderer <device no[0-64]>] "
+      "[-m|--media-renderer <device no[0-64]>] [-s|--scanout <device no[0-64]>] \n");
 }
 
 static void parse_args(int argc, char *argv[]) {
   static const struct option longopts[] = {
       {"help", no_argument, NULL, 'h'},
       {"frames", required_argument, NULL, 'f'},
+      {"3d-renderer", required_argument, NULL, 'r'},
+      {"media-renderer", required_argument, NULL, 'm'},
+      {"scanout", required_argument, NULL, 's'},
       {"json", required_argument, NULL, 'j'},
       {"log", required_argument, NULL, 'l'},
       {"displaymode", required_argument, &display_mode, 1},
@@ -580,7 +588,7 @@ static void parse_args(int argc, char *argv[]) {
   /* Suppress getopt's poor error messages */
   opterr = 0;
 
-  while ((opt = getopt_long(argc, argv, "+:hf:j:l:", longopts,
+  while ((opt = getopt_long(argc, argv, "+:hf:r:m:s:j:l:", longopts,
                             /*longindex*/ &longindex)) != -1) {
     switch (opt) {
       case 0:
@@ -604,6 +612,45 @@ static void parse_args(int argc, char *argv[]) {
         printf("optarg:%s\n", optarg);
         strcpy(json_path, optarg);
         break;
+    case 'r':
+      if (strlen(optarg) >= 2) {
+        printf("Device no should be in range of 0 - 64!\n");
+        exit(0);
+      }
+      printf("Device No used for Rendering:%s\n", optarg);
+      errno = 0;
+      preferred_offscreen_3d_device = strtoul(optarg, &endptr, 0);
+      if (errno || *endptr != '\0') {
+        fprintf(stderr, "usage error: invalid value for <preferred_offscreen_3d_device>\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
+    case 'm':
+      if (strlen(optarg) >= 2) {
+        printf("Device no should be in range of 0 - 64!\n");
+        exit(0);
+      }
+      printf("Device No used for Media:%s\n", optarg);
+      errno = 0;
+      preferred_offscreen_media_device = strtoul(optarg, &endptr, 0);
+      if (errno || *endptr != '\0') {
+        fprintf(stderr, "usage error: invalid value for <preferred_offscreen_media_device>\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
+    case 's':
+      if (strlen(optarg) >= 2) {
+        printf("Device no should be in range of 0 - 64!\n");
+        exit(0);
+      }
+      printf("Device No used for Scanout:%s\n", optarg);
+      errno = 0;
+      preferred_scanout_device = strtoul(optarg, &endptr, 0);
+      if (errno || *endptr != '\0') {
+        fprintf(stderr, "usage error: invalid value for <preferred_scanout_device>\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
       case 'f':
         errno = 0;
         arg_frames = strtoul(optarg, &endptr, 0);
@@ -761,22 +808,46 @@ static void print_all_devices()
        drmFreeDevices(devices, ret);
  }
 
-static void populate_node_info(struct device_info* device_info, drmDevicePtr device, uint32_t device_no)
+static void populate_node_info(struct device_info* device_info, drmDevicePtr device, uint32_t device_no, uint32_t scanout)
 {
    int drm_node = DRM_NODE_RENDER;
 	// Check if this device has available render node.
-	if (device->available_nodes & 1 << drm_node) {
+        if (!scanout && (device->available_nodes & 1 << drm_node)) {
 	  const char *device_name = device->nodes[drm_node];
 	  device_info->render_node = new char[strlen(device_name) + 1]{};
           std::copy(device_name, device_name + strlen(device_name), device_info->render_node);
+          int fd = open(device_info->render_node, O_RDWR);
+          if (fd == -1) {
+            ETRACE("Can't open GPU file %s \n", device_info->render_node);
+            exit(-1);
+          }
+
+          device_info->buffer_handler = hwcomposer::NativeBufferHandler::CreateInstance(fd);
+
+          if (!device_info->buffer_handler) {
+            printf(" Failed to create Buffer Handler for Render Node Device %s \n", device_info->render_node);
+            exit(-1);
+          }
 	}
 
 	drm_node = DRM_NODE_PRIMARY;
 	// Check if this device has available card node.
-	if (device->available_nodes & 1 << drm_node) {
+        if (scanout && (device->available_nodes & 1 << drm_node)) {
 	  const char *device_name = device->nodes[drm_node];
 	  device_info->card_node = new char[strlen(device_name) + 1]{};
           std::copy(device_name, device_name + strlen(device_name), device_info->card_node);
+          int fd = open(device_info->card_node, O_RDWR);
+          if (fd == -1) {
+            ETRACE("Can't open GPU file %s \n", device_info->card_node);
+            exit(-1);
+          }
+
+          device_info->buffer_handler = hwcomposer::NativeBufferHandler::CreateInstance(fd);
+
+          if (!device_info->buffer_handler) {
+            printf(" Failed to create Buffer Handler for Render Node Device %s \n", device_info->render_node);
+            exit(-1);
+          }
 	}
 
 	// Check if this device is discrete
@@ -786,7 +857,7 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
 
 }
 
-static void finalize_preferred_devices(struct device_info* render_device, struct device_info* scanout_device)
+static void finalize_preferred_devices(struct device_info* render_device, struct device_info* media_device, struct device_info* scanout_device)
 {
    #define MAX_DRM_DEVICES 64
    drmDevicePtr devices[MAX_DRM_DEVICES], device;
@@ -794,21 +865,28 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 
    num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
    if (num_devices < 0) {
-     fprintf(stderr, "drmGetDevices2() returned an error %d\n", num_devices);
+     printf("drmGetDevices2() returned an error %d\n", num_devices);
      return;
+    } else {
+       printf("Total no of devices reported by drmGetDevices2() %d\n", num_devices);
+   }
+
+    // Reset preferred_offscreen_3d_device to first available device in case it's invalid.
+    if (preferred_offscreen_3d_device >= num_devices) {
+      preferred_offscreen_3d_device = 0;
     }
 
-    // Reset preferred_offscreen_device to first available device in case it's invalid.
-    if (preferred_offscreen_device > num_devices) {
-      preferred_offscreen_device = 0;
+    // Reset preferred_offscreen_media_device to first available device in case it's invalid.
+    if (preferred_offscreen_media_device >= num_devices) {
+      preferred_offscreen_media_device = 0;
     }
 
-    // Reset preferred_offscreen_device to first available device in case it's invalid.
-    if (preferred_scanout_device > num_devices) {
+    // Reset preferred_scanout_device to first available device in case it's invalid.
+    if (preferred_scanout_device >= num_devices) {
       preferred_scanout_device = 0;
     }
 
-	device = devices[preferred_offscreen_device];
+        device = devices[preferred_offscreen_3d_device];
 	/* Skip Non Intel GPU for now*/
 	if (device->deviceinfo.pci->vendor_id != 0x8086) {
 	  printf("--- Resetting preffered offscreen device ---\n");
@@ -821,15 +899,39 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 	    }
 
 	    // Found Intel GPU break.
-	    preferred_offscreen_device = i;
+            preferred_offscreen_3d_device = i;
 	    break;
 	  }
 	}
 
 
-	populate_node_info(render_device, device, preferred_offscreen_device);
-        printf("Choose the following for Offscreen Rendering:");
-        print_device_info(device, preferred_offscreen_device, false);
+        populate_node_info(render_device, device, preferred_offscreen_3d_device, 0);
+        printf("Choose the following for Offscreen 3D Rendering:");
+        print_device_info(device, preferred_offscreen_3d_device, false);
+
+        // Get Media Renderer information
+        device = devices[preferred_offscreen_media_device];
+        /* Skip Non Intel GPU for now*/
+        if (device->deviceinfo.pci->vendor_id != 0x8086) {
+          printf("--- Resetting preffered offscreen device ---\n");
+          for (i = 0; i < num_devices; i++) {
+            device = devices[i];
+
+            /* Skip Non Intel GPU for now*/
+            if (device->deviceinfo.pci->vendor_id != 0x8086) {
+              continue;
+            }
+
+            // Found Intel GPU break.
+            preferred_offscreen_media_device = i;
+            break;
+          }
+        }
+
+
+        populate_node_info(media_device, device, preferred_offscreen_media_device, 0);
+        printf("Choose the following for Offscreen Media Rendering:");
+        print_device_info(device, preferred_offscreen_media_device, false);
 
 	// Get Scanout Device Information
 	device = devices[preferred_scanout_device];
@@ -851,7 +953,7 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 	  }
 	}
 
-	populate_node_info(scanout_device, device, preferred_scanout_device);
+        populate_node_info(scanout_device, device, preferred_scanout_device, 1);
         printf("Choose the following for Scanout Device:");
         print_device_info(device, preferred_scanout_device, false);
 
@@ -869,6 +971,7 @@ int main(int argc, char *argv[]) {
   uint32_t *configs, preferred_config;
   int32_t kms_fence = -1;
   device_info* render_device;
+  device_info* media_device;
   device_info* scanout_device;
 
   setup_tty();
@@ -940,24 +1043,19 @@ int main(int argc, char *argv[]) {
   parse_args(argc, argv);
 
   render_device = new device_info;
+  media_device = new device_info;
   scanout_device = new device_info;
 
-  finalize_preferred_devices(render_device, scanout_device);
+  finalize_preferred_devices(render_device, media_device, scanout_device);
   print_all_devices();
 
-  fd = open(render_device->render_node ? render_device->render_node : render_device->card_node, O_RDWR);
-  if (fd == -1) {
-    ETRACE("Can't open GPU file");
-    exit(-1);
-  }
-
-  buffer_handler = hwcomposer::NativeBufferHandler::CreateInstance(fd);
-
-  if (!buffer_handler)
-    exit(-1);
-
   if (!init_gl()) {
-    delete buffer_handler;
+    delete render_device->buffer_handler;
+    delete media_device->buffer_handler;
+    delete scanout_device->buffer_handler;
+    delete render_device;
+    delete media_device;
+    delete  scanout_device;
     exit(-1);
   }
 
@@ -998,7 +1096,7 @@ int main(int argc, char *argv[]) {
   printf("Width of primary display is %d height of the primary display is %d\n",
          primary_width, primary_height);
 
-  init_frames(primary_width, primary_height);
+  init_frames(primary_width, primary_height, render_device, media_device, scanout_device);
 
   int64_t gpu_fence_fd = -1; /* out-fence from gpu, in-fence to kms */
   uint32_t frame_total = 0;
