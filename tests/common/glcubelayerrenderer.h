@@ -28,7 +28,8 @@ class NativeBufferHandler;
 class GLCubeLayerRenderer : public GLLayerRenderer {
  public:
   GLCubeLayerRenderer(hwcomposer::NativeBufferHandler *buffer_handler,
-                      bool enable_texture);
+                      bool enable_texture,
+                      int device_no = -1);
   ~GLCubeLayerRenderer() override;
 
   bool Init(uint32_t width, uint32_t height, uint32_t format,

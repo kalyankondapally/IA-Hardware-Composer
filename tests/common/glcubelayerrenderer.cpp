@@ -129,8 +129,8 @@ class StreamTextureImpl {
 };
 
 GLCubeLayerRenderer::GLCubeLayerRenderer(
-    hwcomposer::NativeBufferHandler *buffer_handler, bool enable_texture)
-    : GLLayerRenderer(buffer_handler) {
+    hwcomposer::NativeBufferHandler *buffer_handler, bool enable_texture, int device_no)
+    : GLLayerRenderer(buffer_handler, device_no) {
   enable_texture_ = enable_texture;
 }
 

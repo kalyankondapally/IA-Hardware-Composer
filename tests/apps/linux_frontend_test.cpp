@@ -533,7 +533,7 @@ static void init_frames(int32_t width, int32_t height, struct device_info* rende
 
     switch (layer_parameter.type) {
       case LAYER_TYPE_GL:
-        renderer = new GLCubeLayerRenderer(render_device->buffer_handler, false);
+        renderer = new GLCubeLayerRenderer(render_device->buffer_handler, false, render_device->device_no);
         if (!renderer->Init(layer_parameter.source_width,
                             layer_parameter.source_height, gbm_format, usage_format,
                             usage, &render_device->gl, layer_parameter.resource_path.c_str())) {

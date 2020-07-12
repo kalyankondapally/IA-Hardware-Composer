@@ -21,8 +21,8 @@
 #include <drm_fourcc.h>
 
 GLLayerRenderer::GLLayerRenderer(
-    hwcomposer::NativeBufferHandler* buffer_handler)
-    : LayerRenderer(buffer_handler) {
+    hwcomposer::NativeBufferHandler* buffer_handler, int device_no)
+    : LayerRenderer(buffer_handler, device_no) {
 }
 
 GLLayerRenderer::~GLLayerRenderer() {

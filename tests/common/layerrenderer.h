@@ -46,7 +46,7 @@ class NativeBufferHandler;
 
 class LayerRenderer {
  public:
-  LayerRenderer(hwcomposer::NativeBufferHandler* buffer_handler);
+  LayerRenderer(hwcomposer::NativeBufferHandler* buffer_handler, int device_no = -1);
   virtual ~LayerRenderer();
 
   virtual bool Init(uint32_t width, uint32_t height, uint32_t format,
@@ -55,6 +55,10 @@ class LayerRenderer {
   virtual void Draw(int64_t* pfence) = 0;
   HWCNativeHandle GetNativeBoHandle() {
     return handle_;
+  }
+
+  int GetDeviceNo() const {
+    return device_no_;
   }
 
  protected:
@@ -66,6 +70,7 @@ class LayerRenderer {
   uint32_t height_ = 0;
   uint32_t stride_ = 0;
   uint32_t fd_ = 0;
+  int device_no_ = 0;
 };
 
 #endif

@@ -18,7 +18,7 @@
 
 #include <nativebufferhandler.h>
 
-LayerRenderer::LayerRenderer(hwcomposer::NativeBufferHandler* buffer_handler) {
+LayerRenderer::LayerRenderer(hwcomposer::NativeBufferHandler* buffer_handler, int device_no) : device_no_(device_no) {
   buffer_handler_ = buffer_handler;
 }
 
