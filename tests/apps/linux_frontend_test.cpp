@@ -199,6 +199,7 @@ struct frame {
   std::vector<std::unique_ptr<LayerRenderer>> layer_renderers;
   std::vector<std::vector<uint32_t>> layers_fences;
   std::vector<int32_t> fences;
+  int kms_fence = -1;
 };
 
 struct device_info {
@@ -971,7 +972,6 @@ int main(int argc, char *argv[]) {
   int num_displays, i;
   uint num_configs;
   uint32_t *configs, preferred_config;
-  int32_t kms_fence = -1;
   device_info* render_device;
   device_info* media_device;
   device_info* scanout_device;
@@ -1097,6 +1097,12 @@ int main(int argc, char *argv[]) {
     struct frame *frame = &frames[in_use_frame];
 
     for (uint32_t j = 0; j < frame->layers.size(); j++) {
+        if (frame->kms_fence != -1) {
+          sync_wait(frame->kms_fence, -1);
+          close(frame->kms_fence);
+          frame->kms_fence = -1;
+        }
+
       frame->layers_fences[j].clear();
       frame->layer_renderers[j]->Draw(&gpu_fence_fd);
       backend->iahwc_layer_set_acquire_fence(iahwc_device, 0, frame->layers[j],
@@ -1113,12 +1119,7 @@ int main(int argc, char *argv[]) {
                                   frame->layer_bos[j]);
     }
 
-    if (kms_fence != -1) {
-      sync_wait(kms_fence, -1);
-      close(kms_fence);
-      kms_fence = -1;
-    }
-    backend->iahwc_present_display(iahwc_device, 0, &kms_fence);
+    backend->iahwc_present_display(iahwc_device, 0, &frame->kms_fence);
     frame_total++;
     in_use_frame++;
     if (in_use_frame > 1) {
