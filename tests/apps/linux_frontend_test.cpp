@@ -149,10 +149,6 @@ err_close:
  */
 static uint64_t arg_frames = 0;
 
-/*Enables Hybrid Mode if set to 1
- */
-static bool enable_hybrid_mode = 0;
-
 /*Preferred device for Offscreen 3d Rendering i.e 0 - 64
  */
 static uint32_t preferred_offscreen_3d_device = 0;
@@ -170,8 +166,6 @@ static uint32_t preferred_scanout_device = 0;
 static int display_mode;
 int force_mode = 0, config_index = 0, print_display_config = 0;
 LAYER_PARAMETER layer_parameter;
-
-glContext gl;
 
 struct iahwc_backend {
   iahwc_module_t *iahwc_module;
@@ -209,11 +203,12 @@ struct device_info {
 char* card_node = NULL;
 char* render_node = NULL;
 hwcomposer::NativeBufferHandler *buffer_handler = NULL;
+glContext gl;
 uint32_t is_discrete = false;
 uint32_t device_id = 0;
 };
 
-bool init_gl() {
+bool init_gl(glContext* gl) {
   EGLint major, minor, n;
   static const EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3,
                                            EGL_NONE};
@@ -221,17 +216,17 @@ bool init_gl() {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  gl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  gl->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
-  if (!eglInitialize(gl.display, &major, &minor)) {
+  if (!eglInitialize(gl->display, &major, &minor)) {
     printf("failed to initialize EGL\n");
     return false;
   }
 
 #define get_proc(name, proc)                  \
   do {                                        \
-    gl.name = (proc)eglGetProcAddress(#name); \
-    assert(gl.name);                          \
+    gl->name = (proc)eglGetProcAddress(#name); \
+    assert(gl->name);                          \
   } while (0)
   get_proc(glEGLImageTargetRenderbufferStorageOES,
            PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC);
@@ -244,24 +239,24 @@ bool init_gl() {
   get_proc(glEGLImageTargetTexture2DOES, PFNGLEGLIMAGETARGETTEXTURE2DOESPROC);
   get_proc(eglDestroyImageKHR, PFNEGLDESTROYIMAGEKHRPROC);
 
-  printf("Using display %p with EGL version %d.%d\n", gl.display, major, minor);
+  printf("Using display %p with EGL version %d.%d\n", gl->display, major, minor);
 
-  printf("EGL Version \"%s\"\n", eglQueryString(gl.display, EGL_VERSION));
-  printf("EGL Vendor \"%s\"\n", eglQueryString(gl.display, EGL_VENDOR));
-  printf("EGL Extensions \"%s\"\n", eglQueryString(gl.display, EGL_EXTENSIONS));
+  printf("EGL Version \"%s\"\n", eglQueryString(gl->display, EGL_VERSION));
+  printf("EGL Vendor \"%s\"\n", eglQueryString(gl->display, EGL_VENDOR));
+  printf("EGL Extensions \"%s\"\n", eglQueryString(gl->display, EGL_EXTENSIONS));
 
   if (!eglBindAPI(EGL_OPENGL_ES_API)) {
     printf("failed to bind api EGL_OPENGL_ES_API\n");
     return false;
   }
-  if (!eglChooseConfig(gl.display, config_attribs, &gl.config, 1, &n) ||
+  if (!eglChooseConfig(gl->display, config_attribs, &gl->config, 1, &n) ||
       n != 1) {
     printf("failed to choose config: %d\n", n);
     return false;
   }
-  gl.context =
-      eglCreateContext(gl.display, gl.config, EGL_NO_CONTEXT, context_attribs);
-  if (gl.context == NULL) {
+  gl->context =
+      eglCreateContext(gl->display, gl->config, EGL_NO_CONTEXT, context_attribs);
+  if (gl->context == NULL) {
     printf("failed to create context\n");
     return false;
   }
@@ -477,7 +472,7 @@ static void fill_hwclayer(iahwc_layer_t layer_handle_,
        pParameter->frame_height});
 }
 
-static void init_frames(int32_t width, int32_t height, const struct device_info* render_device, const struct device_info* media_device, const struct device_info* scanout_device) {
+static void init_frames(int32_t width, int32_t height, struct device_info* render_device, const struct device_info* media_device, const struct device_info* scanout_device) {
   size_t LAYER_PARAM_SIZE;
   if (display_mode) {
     layer_parameter.type = static_cast<LAYER_TYPE>(0);
@@ -533,17 +528,16 @@ static void init_frames(int32_t width, int32_t height, const struct device_info*
     switch (layer_parameter.type) {
       case LAYER_TYPE_GL:
         renderer = new GLCubeLayerRenderer(render_device->buffer_handler, false);
+        if (!renderer->Init(layer_parameter.source_width,
+                            layer_parameter.source_height, gbm_format, usage_format,
+                            usage, &render_device->gl, layer_parameter.resource_path.c_str())) {
+          printf("\nrender init not successful\n");
+          exit(-1);
+        }
         break;
       default:
         printf("un-recognized layer type!\n");
         exit(-1);
-    }
-
-    if (!renderer->Init(layer_parameter.source_width,
-                        layer_parameter.source_height, gbm_format, usage_format,
-                        usage, &gl, layer_parameter.resource_path.c_str())) {
-      printf("\nrender init not successful\n");
-      exit(-1);
     }
 
     fill_hwclayer(layer_handle_, &layer_parameter, renderer);
@@ -906,6 +900,10 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 
 
         populate_node_info(render_device, device, preferred_offscreen_3d_device, 0);
+        if (!init_gl(&render_device->gl)) {
+          printf("Failed to initial EGLContext for Offscreen 3D Rendering");
+          exit(-1);
+        }
         printf("Choose the following for Offscreen 3D Rendering:");
         print_device_info(device, preferred_offscreen_3d_device, false);
 
@@ -954,11 +952,24 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 	}
 
         populate_node_info(scanout_device, device, preferred_scanout_device, 1);
+        if (!init_gl(&scanout_device->gl)) {
+          printf("Failed to initial EGLContext for Offscreen 3D Rendering");
+          exit(-1);
+        }
+
         printf("Choose the following for Scanout Device:");
         print_device_info(device, preferred_scanout_device, false);
 
        drmFreeDevices(devices, ret);
  }
+
+static void release_device(struct device_info* device_info)
+{
+    delete device_info->card_node;
+    delete device_info->render_node;
+    delete device_info->buffer_handler;
+    delete device_info;
+}
 
 
 int main(int argc, char *argv[]) {
@@ -1049,16 +1060,6 @@ int main(int argc, char *argv[]) {
   finalize_preferred_devices(render_device, media_device, scanout_device);
   print_all_devices();
 
-  if (!init_gl()) {
-    delete render_device->buffer_handler;
-    delete media_device->buffer_handler;
-    delete scanout_device->buffer_handler;
-    delete render_device;
-    delete media_device;
-    delete  scanout_device;
-    exit(-1);
-  }
-
   backend->iahwc_get_num_displays(iahwc_device, &num_displays);
   printf("Number of displays available is %d\n", num_displays);
 
@@ -1129,6 +1130,10 @@ int main(int argc, char *argv[]) {
     backend->iahwc_present_display(iahwc_device, 0, &kms_fence);
     frame_total++;
   }
+
+  release_device(render_device);
+  release_device(media_device);
+  release_device(scanout_device);
 
   reset_vt();
   return 0;
