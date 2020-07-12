@@ -225,6 +225,7 @@ typedef struct {
   uint32_t frame_y;
   uint32_t frame_width;
   uint32_t frame_height;
+  uint32_t prefer_render_device = 1;
 } LAYER_PARAMETER;
 
 typedef std::vector<LAYER_PARAMETER> LAYER_PARAMETERS;

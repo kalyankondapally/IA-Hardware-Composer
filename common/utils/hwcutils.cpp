@@ -176,7 +176,7 @@ bool IsEdidFilting() {
   const char* key = ALL_EDID_FLAG_PROPERTY;
   char* value = new char[20];
   const char* property_true = "1";
-  int len = property_get(key, value, "0");
+  int len = 0;// property_get(key, value, "0");
   if (len > 0 && strcmp(value, property_true) == 0) {
     delete[] value;
     return false;

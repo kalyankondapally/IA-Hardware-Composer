@@ -6,6 +6,7 @@ bool parseParametersJson(const char* json_path, TEST_PARAMETERS* parameters) {
   json_object* jso = NULL;
   jso = json_object_from_file(json_path);
   if (jso == NULL) {
+    printf("Json file cannot be found %s \n", json_path);
     return false;
   }
 
@@ -47,7 +48,9 @@ bool parseParametersJson(const char* json_path, TEST_PARAMETERS* parameters) {
         json_object_object_foreach(object, layer_key, layer_value) {
           if (strcmp(layer_key, "type") == 0) {
             layer_parameter.type = (LAYER_TYPE)json_object_get_int(layer_value);
-          } else if (strcmp(layer_key, "format") == 0) {
+          } if (strcmp(layer_key, "prefer_render_device") == 0) {
+              layer_parameter.prefer_render_device = json_object_get_int(layer_value);
+            } else if (strcmp(layer_key, "format") == 0) {
             layer_parameter.format =
                 (LAYER_FORMAT)json_object_get_int(layer_value);
           } else if (strcmp(layer_key, "transform") == 0) {

@@ -149,6 +149,10 @@ err_close:
  */
 static uint64_t arg_frames = 0;
 
+/*Enables Hybrid Mode if set to 1
+ */
+static bool enable_hybrid_mode = 0;
+
 /*flag set to test displaymode*/
 static int display_mode;
 int force_mode = 0, config_index = 0, print_display_config = 0;
@@ -186,6 +190,12 @@ struct frame {
   std::vector<std::unique_ptr<LayerRenderer>> layer_renderers;
   std::vector<std::vector<uint32_t>> layers_fences;
   std::vector<int32_t> fences;
+};
+
+struct device_info {
+char *card_node;
+char *render_node;
+uint32_t is_discrete;
 };
 
 bool init_gl() {
@@ -508,7 +518,7 @@ static void init_frames(int32_t width, int32_t height) {
 
     switch (layer_parameter.type) {
       case LAYER_TYPE_GL:
-        renderer = new GLCubeLayerRenderer(buffer_handler, true);
+        renderer = new GLCubeLayerRenderer(buffer_handler, false);
         break;
       default:
         printf("un-recognized layer type!\n");
@@ -629,6 +639,120 @@ static void parse_args(int argc, char *argv[]) {
   }
 }
 
+static void
+print_device_info(drmDevicePtr device, int i, bool print_revision)
+{
+    printf("device[%i]\n", i);
+    printf("+-> available_nodes %#04x\n", device->available_nodes);
+    printf("+-> nodes\n");
+    for (int j = 0; j < DRM_NODE_MAX; j++)
+        if (device->available_nodes & 1 << j)
+            printf("|   +-> nodes[%d] %s\n", j, device->nodes[j]);
+    printf("+-> bustype %04x\n", device->bustype);
+    if (device->bustype == DRM_BUS_PCI) {
+        printf("|   +-> pci\n");
+        printf("|       +-> domain %04x\n",device->businfo.pci->domain);
+        printf("|       +-> bus    %02x\n", device->businfo.pci->bus);
+        printf("|       +-> dev    %02x\n", device->businfo.pci->dev);
+        printf("|       +-> func   %1u\n", device->businfo.pci->func);
+        printf("+-> deviceinfo\n");
+        printf("    +-> pci\n");
+        printf("        +-> vendor_id     %04x\n", device->deviceinfo.pci->vendor_id);
+        printf("        +-> device_id     %04x\n", device->deviceinfo.pci->device_id);
+        printf("        +-> subvendor_id  %04x\n", device->deviceinfo.pci->subvendor_id);
+        printf("        +-> subdevice_id  %04x\n", device->deviceinfo.pci->subdevice_id);
+        if (print_revision)
+            printf("        +-> revision_id   %02x\n", device->deviceinfo.pci->revision_id);
+        else
+            printf("        +-> revision_id   IGNORED\n");
+    } else if (device->bustype == DRM_BUS_USB) {
+        printf("|   +-> usb\n");
+        printf("|       +-> bus %03u\n", device->businfo.usb->bus);
+        printf("|       +-> dev %03u\n", device->businfo.usb->dev);
+        printf("+-> deviceinfo\n");
+        printf("    +-> usb\n");
+        printf("        +-> vendor  %04x\n", device->deviceinfo.usb->vendor);
+        printf("        +-> product %04x\n", device->deviceinfo.usb->product);
+    } else if (device->bustype == DRM_BUS_PLATFORM) {
+        char **compatible = device->deviceinfo.platform->compatible;
+        printf("|   +-> platform\n");
+        printf("|       +-> fullname\t%s\n", device->businfo.platform->fullname);
+        printf("+-> deviceinfo\n");
+        printf("    +-> platform\n");
+        printf("        +-> compatible\n");
+        while (*compatible) {
+            printf("                    %s\n", *compatible);
+            compatible++;
+        }
+    } else if (device->bustype == DRM_BUS_HOST1X) {
+        char **compatible = device->deviceinfo.host1x->compatible;
+        printf("|   +-> host1x\n");
+        printf("|       +-> fullname\t%s\n", device->businfo.host1x->fullname);
+        printf("+-> deviceinfo\n");
+        printf("    +-> host1x\n");
+        printf("        +-> compatible\n");
+        while (*compatible) {
+            printf("                    %s\n", *compatible);
+            compatible++;
+        }
+    } else {
+        printf("Unknown/unhandled bustype\n");
+    }
+    printf("\n");
+}
+
+static void scan_devices(struct device_info* render_device, struct device_info* scanout_device)
+{
+#define MAX_DRM_DEVICES 64
+   drmDevicePtr devices[MAX_DRM_DEVICES], device;
+   int i, ret, num_devices, fd = -1;
+
+   num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
+	if (num_devices < 0) {
+		fprintf(stderr,
+			"drmGetDevices2() returned an error %d\n",
+			num_devices);
+		return;
+	}
+
+
+   for (i = 0; i < num_devices; i++) {
+      device = devices[i];
+		/* If this is not PCI device, skip*/
+		//if (device != DRM_BUS_PCI) {
+		//printf("--- skipping device as its not pci  ---\n");
+		//	continue;
+		//	}
+
+		/* Skip Non Intel GPU for now*/
+		if (devices[i]->deviceinfo.pci->vendor_id != 0x8086) {
+		  printf("--- skipping device %d ---\n", devices[i]->deviceinfo.pci->vendor_id);
+			continue;
+			}
+
+        print_device_info(device, i, false);
+        for (int j = 0; j < DRM_NODE_MAX; j++) {
+            if (devices[i]->available_nodes & 1 << j) {
+                printf("--- Opening device node %s ---\n", devices[i]->nodes[j]);
+                fd = open(devices[i]->nodes[j], O_RDONLY | O_CLOEXEC, 0);
+                if (fd < 0) {
+                    printf("Failed - %s (%d)\n", strerror(errno), errno);
+                    continue;
+                }
+                printf("--- Retrieving device info, for node %s ---\n", devices[i]->nodes[j]);
+                if (drmGetDevice2(fd, DRM_DEVICE_GET_PCI_REVISION, &device) == 0) {
+                    print_device_info(device, i, true);
+                    drmFreeDevice(&device);
+                }
+                close(fd);
+            }
+        }
+   }
+
+       drmFreeDevices(devices, ret);
+ }
+
+
 int main(int argc, char *argv[]) {
   int ret, fd, primary_width, primary_height;
   void *iahwc_dl_handle;
@@ -638,6 +762,7 @@ int main(int argc, char *argv[]) {
   uint num_configs;
   uint32_t *configs, preferred_config;
   int32_t kms_fence = -1;
+  struct device_info* render_device, scanout_device = NULL;
 
   setup_tty();
 
@@ -706,6 +831,11 @@ int main(int argc, char *argv[]) {
           iahwc_device, IAHWC_FUNC_REGISTER_CALLBACK);
 
   parse_args(argc, argv);
+
+  render_device = new struct device_info();
+  scanout_device = new struct device_info();
+
+  scan_devices(render_device, scanout_device);
 
   fd = open("/dev/dri/renderD128", O_RDWR);
   if (fd == -1) {
