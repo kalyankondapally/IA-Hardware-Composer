@@ -33,7 +33,7 @@ struct iahwc_device;
 
 typedef struct iahwc_module {
   const char* name;
-  int (*open)(const struct iahwc_module* module, struct iahwc_device** device, int device_no);
+  int (*open)(const struct iahwc_module* module, struct iahwc_device** device, int* scanout_device_no);
 } iahwc_module_t;
 
 typedef struct iahwc_device {

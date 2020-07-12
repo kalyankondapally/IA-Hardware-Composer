@@ -159,9 +159,7 @@ static uint32_t preferred_offscreen_3d_device = 0;
  */
 static uint32_t preferred_offscreen_media_device = 0;
 
-/*Preferred device for Scanout i.e 0 - 64
- */
-static uint32_t preferred_scanout_device = 0;
+static int preferred_scanout_device = -1;
 
 
 /*flag set to test displaymode*/
@@ -479,7 +477,7 @@ static void fill_hwclayer(iahwc_layer_t layer_handle_,
        pParameter->frame_height});
 }
 
-static void init_frames(int32_t width, int32_t height, struct device_info* render_device, const struct device_info* media_device, const struct device_info* scanout_device) {
+static void init_frames(int32_t width, int32_t height, struct device_info* render_device, const struct device_info* media_device) {
   size_t LAYER_PARAM_SIZE;
   if (display_mode) {
     layer_parameter.type = static_cast<LAYER_TYPE>(0);
@@ -845,7 +843,7 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
 
 }
 
-static void finalize_preferred_devices(struct device_info* render_device, struct device_info* media_device, struct device_info* scanout_device)
+static void finalize_preferred_devices(struct device_info* render_device, struct device_info* media_device)
 {
    #define MAX_DRM_DEVICES 64
    drmDevicePtr devices[MAX_DRM_DEVICES], device;
@@ -867,11 +865,6 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
     // Reset preferred_offscreen_media_device to first available device in case it's invalid.
     if (preferred_offscreen_media_device >= num_devices) {
       preferred_offscreen_media_device = 0;
-    }
-
-    // Reset preferred_scanout_device to first available device in case it's invalid.
-    if (preferred_scanout_device >= num_devices) {
-      preferred_scanout_device = 0;
     }
 
         device = devices[preferred_offscreen_3d_device];
@@ -920,40 +913,9 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
           }
         }
 
-
         populate_node_info(media_device, device, preferred_offscreen_media_device, 0);
         printf("Choose the following for Offscreen Media Rendering:");
         print_device_info(device, preferred_offscreen_media_device, false);
-
-	// Get Scanout Device Information
-	device = devices[preferred_scanout_device];
-
-	/* Skip Non Intel GPU for now*/
-	if (device->deviceinfo.pci->vendor_id != 0x8086) {
-	  printf("--- Resetting preffered offscreen device ---\n");
-	  for (i = 0; i < num_devices; i++) {
-            device = devices[i];
-
-	    /* Skip Non Intel GPU for now*/
-	    if (device->deviceinfo.pci->vendor_id != 0x8086) {
-	      continue;
-	    }
-
-	    // Found Intel GPU break.
-	    preferred_scanout_device = i;
-	    break;
-	  }
-	}
-
-        populate_node_info(scanout_device, device, preferred_scanout_device, 1);
-        if (!init_gl(&scanout_device->gl, render_device->buffer_handler->GetFd())) {
-          printf("Failed to initial EGLContext for Offscreen 3D Rendering");
-          exit(-1);
-        }
-
-        printf("Choose the following for Scanout Device:");
-        print_device_info(device, preferred_scanout_device, false);
-
        drmFreeDevices(devices, ret);
  }
 
@@ -974,7 +936,6 @@ int main(int argc, char *argv[]) {
   uint32_t *configs, preferred_config;
   device_info* render_device;
   device_info* media_device;
-  device_info* scanout_device;
 
   setup_tty();
 
@@ -989,15 +950,15 @@ int main(int argc, char *argv[]) {
 
   parse_args(argc, argv);
 
+  iahwc_module = (iahwc_module_t *)dlsym(iahwc_dl_handle, IAHWC_MODULE_STR);
+  iahwc_module->open(iahwc_module, &iahwc_device, &preferred_scanout_device);
+
+  // Initialize preferred devices for 3D or Media Rendering Needs
   render_device = new device_info;
   media_device = new device_info;
-  scanout_device = new device_info;
 
-  finalize_preferred_devices(render_device, media_device, scanout_device);
+  finalize_preferred_devices(render_device, media_device);
   print_all_devices();
-
-  iahwc_module = (iahwc_module_t *)dlsym(iahwc_dl_handle, IAHWC_MODULE_STR);
-  iahwc_module->open(iahwc_module, &iahwc_device, scanout_device->device_no);
 
   backend->iahwc_module = iahwc_module;
   backend->iahwc_device = iahwc_device;
@@ -1088,7 +1049,7 @@ int main(int argc, char *argv[]) {
   printf("Width of primary display is %d height of the primary display is %d\n",
          primary_width, primary_height);
 
-  init_frames(primary_width, primary_height, render_device, media_device, scanout_device);
+  init_frames(primary_width, primary_height, render_device, media_device);
 
   int64_t gpu_fence_fd = -1; /* out-fence from gpu, in-fence to kms */
   uint32_t frame_total = 0;
@@ -1129,7 +1090,6 @@ int main(int argc, char *argv[]) {
 
   release_device(render_device);
   release_device(media_device);
-  release_device(scanout_device);
 
   reset_vt();
   return 0;

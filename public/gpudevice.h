@@ -47,7 +47,7 @@ class GpuDevice : public HWCThread {
   virtual ~GpuDevice();
 
   // Open device.
-  bool Initialize(int device_no = -1);
+  bool Initialize(int* scanout_device_no);
 
   FrameBufferManager* GetFrameBufferManager();
 

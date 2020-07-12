@@ -54,20 +54,17 @@ DrmDisplayManager::~DrmDisplayManager() {
   close(offscreen_fd_);
 }
 
-bool DrmDisplayManager::Initialize(int device_no) {
+bool DrmDisplayManager::Initialize(int* scanout_device_no) {
   CTRACE();
 
-  if (device_no != -1) {
-    InitializePrefferedDisplay(device_no);
-    IsDrmMasterByDefault();
-  } else {
-    fd_ = drmOpen("i915", NULL);
-  }
+  InitializePreferredScanoutDevice(scanout_device_no);
 
   if (fd_ < 0) {
     ETRACE("Failed to open dri %s", PRINTERROR());
     return -ENODEV;
   }
+
+  IsDrmMasterByDefault();
 
   struct drm_set_client_cap cap = {DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1};
   drmIoctl(fd_, DRM_IOCTL_SET_CLIENT_CAP, &cap);
@@ -142,10 +139,70 @@ bool DrmDisplayManager::Initialize(int device_no) {
   return true;
 }
 
-void DrmDisplayManager::InitializePrefferedDisplay(int device_no) {
+void DrmDisplayManager::PrintDeviceInfo(drmDevicePtr device, int i, bool print_revision) {
+    ETRACE("\n Info for device[%i]\n", i);
+    ETRACE("+-> available_nodes %#04x\n", device->available_nodes);
+    ETRACE("+-> nodes\n");
+    for (int j = 0; j < DRM_NODE_MAX; j++)
+        if (device->available_nodes & 1 << j)
+            ETRACE("|   +-> nodes[%d] %s\n", j, device->nodes[j]);
+    ETRACE("+-> bustype %04x\n", device->bustype);
+    if (device->bustype == DRM_BUS_PCI) {
+        ETRACE("|   +-> pci\n");
+        ETRACE("|       +-> domain %04x\n",device->businfo.pci->domain);
+        ETRACE("|       +-> bus    %02x\n", device->businfo.pci->bus);
+        ETRACE("|       +-> dev    %02x\n", device->businfo.pci->dev);
+        ETRACE("|       +-> func   %1u\n", device->businfo.pci->func);
+        ETRACE("+-> deviceinfo\n");
+        ETRACE("    +-> pci\n");
+        ETRACE("        +-> vendor_id     %04x\n", device->deviceinfo.pci->vendor_id);
+        ETRACE("        +-> device_id     %04x\n", device->deviceinfo.pci->device_id);
+        ETRACE("        +-> subvendor_id  %04x\n", device->deviceinfo.pci->subvendor_id);
+        ETRACE("        +-> subdevice_id  %04x\n", device->deviceinfo.pci->subdevice_id);
+        if (print_revision)
+            ETRACE("        +-> revision_id   %02x\n", device->deviceinfo.pci->revision_id);
+        else
+            ETRACE("        +-> revision_id   IGNORED\n");
+    } else if (device->bustype == DRM_BUS_USB) {
+        ETRACE("|   +-> usb\n");
+        ETRACE("|       +-> bus %03u\n", device->businfo.usb->bus);
+        ETRACE("|       +-> dev %03u\n", device->businfo.usb->dev);
+        ETRACE("+-> deviceinfo\n");
+        ETRACE("    +-> usb\n");
+        ETRACE("        +-> vendor  %04x\n", device->deviceinfo.usb->vendor);
+        ETRACE("        +-> product %04x\n", device->deviceinfo.usb->product);
+    } else if (device->bustype == DRM_BUS_PLATFORM) {
+        char **compatible = device->deviceinfo.platform->compatible;
+        ETRACE("|   +-> platform\n");
+        ETRACE("|       +-> fullname\t%s\n", device->businfo.platform->fullname);
+        ETRACE("+-> deviceinfo\n");
+        ETRACE("    +-> platform\n");
+        ETRACE("        +-> compatible\n");
+        while (*compatible) {
+            ETRACE("                    %s\n", *compatible);
+            compatible++;
+        }
+    } else if (device->bustype == DRM_BUS_HOST1X) {
+        char **compatible = device->deviceinfo.host1x->compatible;
+        ETRACE("|   +-> host1x\n");
+        ETRACE("|       +-> fullname\t%s\n", device->businfo.host1x->fullname);
+        ETRACE("+-> deviceinfo\n");
+        ETRACE("    +-> host1x\n");
+        ETRACE("        +-> compatible\n");
+        while (*compatible) {
+            ETRACE("                    %s\n", *compatible);
+            compatible++;
+        }
+    } else {
+        ETRACE("Unknown/unhandled bustype\n");
+    }
+    ETRACE("\n");
+}
+
+void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no) {
 #define MAX_DRM_DEVICES 64
   drmDevicePtr devices[MAX_DRM_DEVICES], device;
-  int i, ret, num_devices, fd = -1;
+  int i, ret, num_devices, preferred_device = 0;
 
   num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
   if (num_devices < 0) {
@@ -153,12 +210,37 @@ void DrmDisplayManager::InitializePrefferedDisplay(int device_no) {
     return;
   }
 
-  if (device_no >= num_devices) {
-    ETRACE("Preferred Device No is greater than the total avaiable devices Preffered Device No: %d Total Available Devices: %d\n", device_no, num_devices);
-    return;
+  // FIXME: Add support for getENV()
+
+  if (preferred_device >= num_devices) {
+    ETRACE("Preferred Device No is greater than the total avaiable devices Preffered Device No: %d Total Available Devices: %d. \n", preferred_device, num_devices);
+    ETRACE("Will try using first available Device with Scanout support. \n");
+    preferred_device = 0;
    }
 
-   device = devices[device_no];
+  for (i = 0; i < num_devices; i++) {
+    device = devices[i];
+
+    /* Skip Non Intel GPU for now*/
+    if (device->deviceinfo.pci->vendor_id != 0x8086) {
+      continue;
+    }
+
+    int drm_node = DRM_NODE_PRIMARY;
+    // Check if this device has available card node.
+    if (!(device->available_nodes & 1 << drm_node)) {
+      continue;
+    }
+
+    // TODO: ADD check to see if the device is iGFX or dGFX.
+    // Found Intel GPU break.
+    preferred_device = i;
+    break;
+  }
+
+   device = devices[preferred_device];
+   // Pass the preffered device setting to the caller.
+   *scanout_device_no = preferred_device;
    int drm_node = DRM_NODE_PRIMARY;
    // We don't do any sanity checks here. If we cannot open as primary device, we just fail the initialization.
    fd_ = open(device->nodes[drm_node], O_RDWR | FD_CLOEXEC, 0);
@@ -173,13 +255,8 @@ void DrmDisplayManager::InitializePrefferedDisplay(int device_no) {
    // Check if this device has available render node.
    if (device->available_nodes & 1 << drm_node) {
      offscreen_fd_ = open(device->nodes[drm_node], O_RDWR);
-     if (offscreen_fd_ == -1) {
-       ETRACE("Can't open GPU file for offscreen rendering, falling back to Card Node %s \n", device->nodes[drm_node]);
-       offscreen_fd_ = fd_;  // Reset preferred_scanout_device to first available device in case it's invalid.
-     }
-
     if (offscreen_fd_ != -1)
-      fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+      fcntl(offscreen_fd_, F_SETFD, fcntl(offscreen_fd_, F_GETFD) | FD_CLOEXEC);
 
     if (offscreen_fd_ == -1 && errno == EACCES) {
       ETRACE("Can't open GPU file for offscreen rendering with right permissions, falling back to Card Node %s \n", device->nodes[drm_node]);
@@ -187,7 +264,13 @@ void DrmDisplayManager::InitializePrefferedDisplay(int device_no) {
     }
   }
 
-  drmFreeDevices(devices, ret);
+   if (offscreen_fd_ == -1) {
+     ETRACE("Can't open GPU file for offscreen rendering, falling back to Card Node %s \n", device->nodes[drm_node]);
+     offscreen_fd_ = fd_;  // Reset preferred_scanout_device to first available device in case it's invalid.
+   }
+
+   PrintDeviceInfo(device, preferred_device, true);
+   drmFreeDevices(devices, ret);
 }
 
 void DrmDisplayManager::HotPlugEventHandler() {

@@ -98,8 +98,8 @@ IAHWC::IAHWC() {
   close = HookClose;
 }
 
-int32_t IAHWC::Init(int device_no) {
-  if (!device_.Initialize(device_no)) {
+int32_t IAHWC::Init(int* scanout_device_no) {
+  if (!device_.Initialize(scanout_device_no)) {
     fprintf(stderr, "Unable to initialize GPU DEVICE");
     return IAHWC_ERROR_NO_RESOURCES;
   }
@@ -116,9 +116,9 @@ int32_t IAHWC::Init(int device_no) {
   return IAHWC_ERROR_NONE;
 }
 
-int IAHWC::HookOpen(const iahwc_module_t* module, iahwc_device_t** device, int device_no) {
+int IAHWC::HookOpen(const iahwc_module_t* module, iahwc_device_t** device, int* scanout_device_no) {
   IAHWC* iahwc = new IAHWC();
-  iahwc->Init(device_no);
+  iahwc->Init(scanout_device_no);
   *device = iahwc;
 
   return IAHWC_ERROR_NONE;

@@ -47,7 +47,7 @@ void GpuDevice::ResetAllDisplayCommit(bool enable) {
     total_displays_.at(i)->EnableDRMCommit(enable);
 }
 
-bool GpuDevice::Initialize(int device_no) {
+bool GpuDevice::Initialize(int* scanout_device_no) {
   initialization_state_lock_.lock();
   if (initialization_state_ & kInitialized) {
     initialization_state_lock_.unlock();
@@ -59,7 +59,7 @@ bool GpuDevice::Initialize(int device_no) {
 
   display_manager_.reset(DisplayManager::CreateDisplayManager());
 
-  bool success = display_manager_->Initialize(device_no);
+  bool success = display_manager_->Initialize(scanout_device_no);
   if (!success) {
     return false;
   }

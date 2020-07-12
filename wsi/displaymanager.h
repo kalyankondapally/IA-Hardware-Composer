@@ -36,7 +36,7 @@ class DisplayManager {
   // is expected to be called to handle things
   // which can be initialized later to finish
   // the initialization.
-  virtual bool Initialize(int device_no = -1) = 0;
+  virtual bool Initialize(int* scanout_device_no) = 0;
 
   // GetAllDisplays is expected to return set
   // of correct displays after this call is done.

@@ -49,7 +49,7 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   DrmDisplayManager();
   ~DrmDisplayManager() override;
 
-  bool Initialize(int device_no = -1) override;
+  bool Initialize(int* scanout_device_no) override;
 
   void InitializeDisplayResources() override;
 
@@ -112,7 +112,8 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   void HandleRoutine() override;
 
  private:
-  void InitializePrefferedDisplay(int device_no);
+  void PrintDeviceInfo(drmDevicePtr device, int i, bool print_revision);
+  void InitializePreferredScanoutDevice(int* scanout_device_no);
   void HotPlugEventHandler();
   bool UpdateDisplayState();
   std::map<uint32_t, std::unique_ptr<NativeDisplay>> virtual_displays_;
