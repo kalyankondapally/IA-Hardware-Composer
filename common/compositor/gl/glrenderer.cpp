@@ -38,6 +38,7 @@ GLRenderer::~GLRenderer() {
 }
 
 bool GLRenderer::Init() {
+    InitializeShims();
   // clang-format off
   const GLfloat verts[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f,
                            0.0f, 2.0f, 2.0f, 0.0f, 2.0f, 0.0f};
@@ -51,8 +52,6 @@ bool GLRenderer::Init() {
     ETRACE("Failed to initialize GLRenderer.");
     return false;
   }
-
-  InitializeShims();
 
   // generate the VAO & bind
   GLuint vertex_array;

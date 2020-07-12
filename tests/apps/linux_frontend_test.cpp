@@ -209,19 +209,6 @@ uint32_t device_id = 0;
 };
 
 bool init_gl(glContext* gl) {
-  EGLint major, minor, n;
-  static const EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3,
-                                           EGL_NONE};
-
-  static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
-                                          EGL_NONE};
-
-  gl->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-
-  if (!eglInitialize(gl->display, &major, &minor)) {
-    printf("failed to initialize EGL\n");
-    return false;
-  }
 
 #define get_proc(name, proc)                  \
   do {                                        \
@@ -238,6 +225,23 @@ bool init_gl(glContext* gl) {
   get_proc(eglDupNativeFenceFDANDROID, PFNEGLDUPNATIVEFENCEFDANDROIDPROC);
   get_proc(glEGLImageTargetTexture2DOES, PFNGLEGLIMAGETARGETTEXTURE2DOESPROC);
   get_proc(eglDestroyImageKHR, PFNEGLDESTROYIMAGEKHRPROC);
+  get_proc(eglGetPlatformDisplay, PFNEGLGETPLATFORMDISPLAYEXTPROC);
+
+  EGLint major, minor, n;
+  static const EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3,
+                                           EGL_NONE};
+
+  static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
+                                          EGL_NONE};
+
+  gl->display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+
+
+  if (!eglInitialize(gl->display, &major, &minor)) {
+    printf("failed to initialize EGL\n");
+    return false;
+  }
+
 
   printf("Using display %p with EGL version %d.%d\n", gl->display, major, minor);
 

@@ -165,7 +165,7 @@ bool init_gl() {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  gl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  gl.display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
 
   if (!eglInitialize(gl.display, &major, &minor)) {
     printf("failed to initialize EGL\n");

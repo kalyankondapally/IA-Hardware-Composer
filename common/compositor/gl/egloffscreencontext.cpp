@@ -40,7 +40,7 @@ bool EGLOffScreenContext::Init() {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
 
   if (egl_display_ == EGL_NO_DISPLAY) {
     ETRACE("Failed to get egl display");
