@@ -50,11 +50,20 @@ DrmDisplayManager::~DrmDisplayManager() {
   close(hotplug_fd_);
 #endif
   drmClose(fd_);
+  close(fd_);
+  close(offscreen_fd_);
 }
 
-bool DrmDisplayManager::Initialize() {
+bool DrmDisplayManager::Initialize(int device_no) {
   CTRACE();
-  fd_ = drmOpen("i915", NULL);
+
+  if (device_no != -1) {
+    InitializePrefferedDisplay(device_no);
+    IsDrmMasterByDefault();
+  } else {
+    fd_ = drmOpen("i915", NULL);
+  }
+
   if (fd_ < 0) {
     ETRACE("Failed to open dri %s", PRINTERROR());
     return -ENODEV;
@@ -101,6 +110,8 @@ bool DrmDisplayManager::Initialize() {
     c.reset();
   }
 
+          ETRACE("Display Initialized-----------------------");
+
 #ifndef DISABLE_HOTPLUG_NOTIFICATION
   hotplug_fd_ = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
   if (hotplug_fd_ < 0) {
@@ -129,6 +140,54 @@ bool DrmDisplayManager::Initialize() {
   IHOTPLUGEVENTTRACE("DisplayManager Initialization succeeded.");
   res.reset();
   return true;
+}
+
+void DrmDisplayManager::InitializePrefferedDisplay(int device_no) {
+#define MAX_DRM_DEVICES 64
+  drmDevicePtr devices[MAX_DRM_DEVICES], device;
+  int i, ret, num_devices, fd = -1;
+
+  num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
+  if (num_devices < 0) {
+    ETRACE("drmGetDevices2() returned an error %d\n", num_devices);
+    return;
+  }
+
+  if (device_no >= num_devices) {
+    ETRACE("Preferred Device No is greater than the total avaiable devices Preffered Device No: %d Total Available Devices: %d\n", device_no, num_devices);
+    return;
+   }
+
+   device = devices[device_no];
+   int drm_node = DRM_NODE_PRIMARY;
+   // We don't do any sanity checks here. If we cannot open as primary device, we just fail the initialization.
+   fd_ = open(device->nodes[drm_node], O_RDWR | FD_CLOEXEC, 0);
+   if (fd_ == -1 || errno == EACCES) {
+     ETRACE("Can't open GPU file %s \n", device->nodes[drm_node]);
+     return;
+   }
+
+   ETRACE("card string %s \n", device->nodes[drm_node]);
+
+   drm_node = DRM_NODE_RENDER;
+   // Check if this device has available render node.
+   if (device->available_nodes & 1 << drm_node) {
+     offscreen_fd_ = open(device->nodes[drm_node], O_RDWR);
+     if (offscreen_fd_ == -1) {
+       ETRACE("Can't open GPU file for offscreen rendering, falling back to Card Node %s \n", device->nodes[drm_node]);
+       offscreen_fd_ = fd_;  // Reset preferred_scanout_device to first available device in case it's invalid.
+     }
+
+    if (offscreen_fd_ != -1)
+      fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+
+    if (offscreen_fd_ == -1 && errno == EACCES) {
+      ETRACE("Can't open GPU file for offscreen rendering with right permissions, falling back to Card Node %s \n", device->nodes[drm_node]);
+      offscreen_fd_ = fd_;
+    }
+  }
+
+  drmFreeDevices(devices, ret);
 }
 
 void DrmDisplayManager::HotPlugEventHandler() {

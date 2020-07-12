@@ -35,7 +35,7 @@ class PixelUploader;
 class IAHWC : public iahwc_device {
  public:
   IAHWC();
-  int32_t Init();
+  int32_t Init(int device_no);
 
   class IAHWCLayer : public PixelUploaderLayerCallback {
    public:
@@ -121,7 +121,7 @@ class IAHWC : public iahwc_device {
     return static_cast<IAHWC*>(dev);
   }
 
-  static int HookOpen(const iahwc_module_t*, iahwc_device_t**);
+  static int HookOpen(const iahwc_module_t*, iahwc_device_t**, int device_no);
   static int HookClose(iahwc_device_t*);
   static iahwc_function_ptr_t HookGetFunctionPtr(iahwc_device_t*, int);
 

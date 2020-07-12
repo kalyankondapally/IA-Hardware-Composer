@@ -36,7 +36,7 @@ class DisplayManager {
   // is expected to be called to handle things
   // which can be initialized later to finish
   // the initialization.
-  virtual bool Initialize() = 0;
+  virtual bool Initialize(int device_no = -1) = 0;
 
   // GetAllDisplays is expected to return set
   // of correct displays after this call is done.
@@ -63,6 +63,8 @@ class DisplayManager {
 
   // Get FD associated with this DisplayManager.
   virtual uint32_t GetFD() const = 0;
+
+  virtual uint32_t GetOffScreenFD() const = 0;
 
   virtual NativeDisplay *CreateVirtualDisplay(uint32_t display_index) = 0;
   virtual void DestroyVirtualDisplay(uint32_t display_index) = 0;

@@ -49,7 +49,7 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   DrmDisplayManager();
   ~DrmDisplayManager() override;
 
-  bool Initialize() override;
+  bool Initialize(int device_no = -1) override;
 
   void InitializeDisplayResources() override;
 
@@ -85,6 +85,10 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
     return fd_;
   }
 
+  uint32_t GetOffScreenFD() const override {
+    return offscreen_fd_;
+  }
+
   void NotifyClientsOfDisplayChangeStatus();
 
   void HandleLazyInitialization();
@@ -108,6 +112,7 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   void HandleRoutine() override;
 
  private:
+  void InitializePrefferedDisplay(int device_no);
   void HotPlugEventHandler();
   bool UpdateDisplayState();
   std::map<uint32_t, std::unique_ptr<NativeDisplay>> virtual_displays_;
@@ -118,6 +123,7 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   GpuDevice &device_ = GpuDevice::getInstance();
   bool ignore_updates_ = false;
   int fd_ = -1;
+  int offscreen_fd_ = -1;
   int hotplug_fd_ = -1;
   bool notify_client_ = false;
   bool release_lock_ = false;

@@ -47,11 +47,13 @@ class GpuDevice : public HWCThread {
   virtual ~GpuDevice();
 
   // Open device.
-  bool Initialize();
+  bool Initialize(int device_no = -1);
 
   FrameBufferManager* GetFrameBufferManager();
 
   uint32_t GetFD() const;
+
+  uint32_t GetOffScreenFD() const;
 
   NativeDisplay* GetDisplay(uint32_t display);
 

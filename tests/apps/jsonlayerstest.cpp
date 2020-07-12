@@ -801,7 +801,7 @@ int main(int argc, char *argv[]) {
   setup_tty();
 #endif
   hwcomposer::GpuDevice &device = hwcomposer::GpuDevice::getInstance();
-  device.Initialize();
+  device.Initialize(0);
   auto callback = std::make_shared<HotPlugEventCallback>();
   device.RegisterHotPlugEventCallback(callback);
   const std::vector<hwcomposer::NativeDisplay *> &displays =

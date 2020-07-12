@@ -47,7 +47,7 @@ void GpuDevice::ResetAllDisplayCommit(bool enable) {
     total_displays_.at(i)->EnableDRMCommit(enable);
 }
 
-bool GpuDevice::Initialize() {
+bool GpuDevice::Initialize(int device_no) {
   initialization_state_lock_.lock();
   if (initialization_state_ & kInitialized) {
     initialization_state_lock_.unlock();
@@ -59,7 +59,7 @@ bool GpuDevice::Initialize() {
 
   display_manager_.reset(DisplayManager::CreateDisplayManager());
 
-  bool success = display_manager_->Initialize();
+  bool success = display_manager_->Initialize(device_no);
   if (!success) {
     return false;
   }
@@ -96,6 +96,10 @@ FrameBufferManager *GpuDevice::GetFrameBufferManager() {
 
 uint32_t GpuDevice::GetFD() const {
   return display_manager_->GetFD();
+}
+
+uint32_t GpuDevice::GetOffScreenFD() const {
+  return display_manager_->GetOffScreenFD();
 }
 
 NativeDisplay *GpuDevice::GetDisplay(uint32_t display_id) {

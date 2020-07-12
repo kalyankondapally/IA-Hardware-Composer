@@ -202,12 +202,10 @@ struct frame {
 };
 
 struct device_info {
-char* card_node = NULL;
-char* render_node = NULL;
 hwcomposer::NativeBufferHandler *buffer_handler = NULL;
 glContext gl;
 uint32_t is_discrete = false;
-uint32_t device_id = 0;
+uint32_t device_no = 0;
 };
 
 bool init_gl(glContext* gl, int device_fd) {
@@ -814,13 +812,11 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
 {
    int drm_node = DRM_NODE_RENDER;
 	// Check if this device has available render node.
-        if (!scanout && (device->available_nodes & 1 << drm_node)) {
+        if (device->available_nodes & 1 << drm_node) {
 	  const char *device_name = device->nodes[drm_node];
-	  device_info->render_node = new char[strlen(device_name) + 1]{};
-          std::copy(device_name, device_name + strlen(device_name), device_info->render_node);
-          int fd = open(device_info->render_node, O_RDWR);
+          int fd = open(device->nodes[drm_node], O_RDWR);
           if (fd == -1) {
-            ETRACE("Can't open GPU file %s \n", device_info->render_node);
+            ETRACE("Can't open GPU file %s \n", device->nodes[drm_node]);
             exit(-1);
           }
           if (fd != -1)
@@ -834,43 +830,17 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
           device_info->buffer_handler = hwcomposer::NativeBufferHandler::CreateInstance(fd);
 
           if (!device_info->buffer_handler) {
-            printf(" Failed to create Buffer Handler for Render Node Device %s \n", device_info->render_node);
+            printf(" Failed to create Buffer Handler for Render Node Device %s \n", device->nodes[drm_node]);
             exit(-1);
           }
 	}
 
-	drm_node = DRM_NODE_PRIMARY;
-	// Check if this device has available card node.
-        if (scanout && (device->available_nodes & 1 << drm_node)) {
-	  const char *device_name = device->nodes[drm_node];
-	  device_info->card_node = new char[strlen(device_name) + 1]{};
-          std::copy(device_name, device_name + strlen(device_name), device_info->card_node);
-          int fd = open(device_info->card_node, O_RDWR);
-          if (fd == -1) {
-            ETRACE("Can't open GPU file %s \n", device_info->card_node);
-            exit(-1);
-          }
-
-          if (fd != -1)
-             fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
-
-          if (fd == -1 && errno == EACCES) {
-            ETRACE("failed to open %s: %s\n", "/dev/dri/renderD128", strerror(errno));
-            exit(-1);
-          }
-
-          device_info->buffer_handler = hwcomposer::NativeBufferHandler::CreateInstance(fd);
-
-          if (!device_info->buffer_handler) {
-            printf(" Failed to create Buffer Handler for Render Node Device %s \n", device_info->render_node);
-            exit(-1);
-          }
-	}
+        // We don't open CardO device to avoid any authentication issues on the Display Server Side.
 
 	// Check if this device is discrete
 	device_info->is_discrete = false; // TODO: Fix This.
 
-	device_info->device_id = device_no;
+        device_info->device_no = device_no;
 
 }
 
@@ -988,8 +958,6 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 
 static void release_device(struct device_info* device_info)
 {
-    delete device_info->card_node;
-    delete device_info->render_node;
     delete device_info->buffer_handler;
     delete device_info;
 }
@@ -1019,8 +987,17 @@ int main(int argc, char *argv[]) {
     abort();
   }
 
+  parse_args(argc, argv);
+
+  render_device = new device_info;
+  media_device = new device_info;
+  scanout_device = new device_info;
+
+  finalize_preferred_devices(render_device, media_device, scanout_device);
+  print_all_devices();
+
   iahwc_module = (iahwc_module_t *)dlsym(iahwc_dl_handle, IAHWC_MODULE_STR);
-  iahwc_module->open(iahwc_module, &iahwc_device);
+  iahwc_module->open(iahwc_module, &iahwc_device, scanout_device->device_no);
 
   backend->iahwc_module = iahwc_module;
   backend->iahwc_device = iahwc_device;
@@ -1073,15 +1050,6 @@ int main(int argc, char *argv[]) {
   backend->iahwc_register_callback =
       (IAHWC_PFN_REGISTER_CALLBACK)iahwc_device->getFunctionPtr(
           iahwc_device, IAHWC_FUNC_REGISTER_CALLBACK);
-
-  parse_args(argc, argv);
-
-  render_device = new device_info;
-  media_device = new device_info;
-  scanout_device = new device_info;
-
-  finalize_preferred_devices(render_device, media_device, scanout_device);
-  print_all_devices();
 
   backend->iahwc_get_num_displays(iahwc_device, &num_displays);
   printf("Number of displays available is %d\n", num_displays);
