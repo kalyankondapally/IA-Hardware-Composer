@@ -155,7 +155,7 @@ static uint64_t arg_frames = 0;
  * system and choose one which is not used for Scanout on which this application is being presented.
  * Media and 3D will use the same device for offscreen rendering.
  */
-static uint32_t hybrid_mode = 0;
+static uint32_t force_disable_hybrid_mode = 0;
 
 /* Set hybrid mode to true or false. In this case we will search for all available devices on the
  * system and choose one which is not used for Scanout on which this application is being presented.
@@ -170,6 +170,10 @@ static uint32_t hybrid_mode_media = 0;
  * Scanout device for offscreen rendering
  */
 static uint32_t hybrid_mode_3d = 0;
+
+/* This is set ot true in case the scanout device is Intel GPU.
+ */
+static bool scanout_is_intel_gpu = false;
 
 /*Preferred device for scanout i.e 0 - 64. Will be provided by the system compositor
  */
@@ -584,7 +588,7 @@ static void print_help(void) {
       "usage: testjsonlayers [-h|--help] [-f|--frames <frames>] [-j|--json "
       "<jsonfile>] [-p|--powermode <on/off/doze/dozesuspend>][--displaymode "
       "<print/forcemode displayconfigindex] [-r|--hybrid_mode_3d <option[0 or 1]>] "
-      "[-v|--hybrid_mode_media <option[0 or 1]>] [-m|--hybrid_mode <option[0 or 1]>] \n");
+      "[-m|--hybrid_mode_media <option[0 or 1]>] [-d|--force_disable_hybrid_mode <option[0 or 1]>] \n");
 }
 
 static void parse_args(int argc, char *argv[]) {
@@ -592,8 +596,8 @@ static void parse_args(int argc, char *argv[]) {
       {"help", no_argument, NULL, 'h'},
       {"frames", required_argument, NULL, 'f'},
       {"hybrid_mode_3d", required_argument, NULL, 'r'},
-      {"hybrid_mode_media", required_argument, NULL, 'v'},
-      {"hybrid_mode", required_argument, NULL, 'm'},
+      {"hybrid_mode_media", required_argument, NULL, 'm'},
+      {"force_disable_hybrid_mode", required_argument, NULL, 'd'},
       {"json", required_argument, NULL, 'j'},
       {"log", required_argument, NULL, 'l'},
       {"displaymode", required_argument, &display_mode, 1},
@@ -608,7 +612,7 @@ static void parse_args(int argc, char *argv[]) {
   /* Suppress getopt's poor error messages */
   opterr = 0;
 
-  while ((opt = getopt_long(argc, argv, "+:hf:r:v:m:s:j:l:", longopts,
+  while ((opt = getopt_long(argc, argv, "+:hf:r:m:d:s:j:l:", longopts,
                             /*longindex*/ &longindex)) != -1) {
     switch (opt) {
       case 0:
@@ -632,20 +636,20 @@ static void parse_args(int argc, char *argv[]) {
         printf("optarg:%s\n", optarg);
         strcpy(json_path, optarg);
         break;
-    case 'm':
+    case 'd':
       if (strlen(optarg) > 1) {
         printf("Pass 1 to enable Hybrid Mode or 0 to disable it!\n");
         exit(0);
       }
       printf("Preferred Hybrid Mode for Media and 3D:%s\n", optarg);
       errno = 0;
-      hybrid_mode = strtoul(optarg, &endptr, 0);
+      force_disable_hybrid_mode = strtoul(optarg, &endptr, 0);
       if (errno || *endptr != '\0') {
         fprintf(stderr, "usage error: invalid value for <hybrid_mode>\n");
         exit(EXIT_FAILURE);
       }
       break;
-    case 'v':
+    case 'm':
       if (strlen(optarg) > 1) {
         printf("Pass 1 to enable Hybrid Mode for Media or 0 to disable it!\n");
         exit(0);
@@ -880,36 +884,56 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
        printf("Total no of devices reported by drmGetDevices2() %d\n", num_devices);
    }
 
-   if (hybrid_mode || hybrid_mode_3d || hybrid_mode_media) {
-       for (i = 0; i < num_devices; i++) {
-         device = devices[i];
+   if (!force_disable_hybrid_mode) {
+     for (i = 0; i < num_devices; i++) {
+       device = devices[i];
 
-         /* Skip Non Intel GPU for now*/
-         if (device->deviceinfo.pci->vendor_id != 0x8086) {
-           continue;
-         }
-
-         // Skip scanout device in case we are in hybrid mode.
-         if (i == preferred_scanout_device) {
-           continue;
-         }
-
-         // Found Intel GPU break.
-         hybrid_device_no = i;
-         break;
+       /* Skip Non Intel GPU for now*/
+       if (device->deviceinfo.pci->vendor_id != 0x8086) {
+         continue;
        }
-   }
+
+       // Skip scanout device in case we are in hybrid mode.
+       if (i == preferred_scanout_device) {
+         scanout_is_intel_gpu = true;
+
+         // We already found hybrid device.
+         if (hybrid_device_no != preferred_scanout_device)
+           break;
+
+         // Continue to check if we can use another device for 3d or Media rendering.
+         continue;
+       }
+
+       // Found Intel GPU break.
+       hybrid_device_no = i;
+
+       // We have two devices we need break.
+       if (scanout_is_intel_gpu)
+         break;
+    }
+
+    // We disable hybrid mode for now in case both devices are not intel gpu.
+    if (!scanout_is_intel_gpu) {
+      hybrid_device_no =  preferred_scanout_device;
+      force_disable_hybrid_mode = true;
+      ETRACE("We are not using Intel GPU for scanout. Hybrid Mode will be disabled \n");
+    }
+  }
 
    // Reset hybrid mode if we cannot support it.
-   if (hybrid_device_no == preferred_scanout_device) {
-     hybrid_mode = false;
+   if ((hybrid_device_no == preferred_scanout_device)) {
      hybrid_mode_3d = false;
      hybrid_mode_media = false;
+   } else if (!hybrid_mode_3d && !hybrid_mode_media) {
+     // Let's not enable hybrid mode for all layers in case request is only for 3d or media.
+       hybrid_mode_3d = true;
+       hybrid_mode_media = true;
    }
 
    // If we are not in hybrid mode for 3D rendering than we prefer same device as scanout.
    // FIXME: Eventually this should be dynamic setting based on Performane and Power data.
-   if (hybrid_mode || hybrid_mode_3d) {
+   if (hybrid_mode_3d) {
      preferred_offscreen_3d_device = hybrid_device_no;
    }
 
@@ -928,7 +952,7 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
    // Get Media Renderer information
    // If we are not in hybrid mode for Media rendering than we prefer same device as scanout.
    // FIXME: Eventually this should be dynamic setting based on Performane and Power data.
-   if (hybrid_mode || hybrid_mode_media) {
+   if (hybrid_mode_media) {
      preferred_offscreen_media_device = hybrid_device_no;
    }
 
@@ -994,14 +1018,16 @@ int main(int argc, char *argv[]) {
 
   finalize_preferred_devices(render_device, media_device, scanout_device);
   ETRACE("Hybrid Configuration: \n");
-  if (hybrid_mode) {
-    ETRACE("Hybrid Mode for 3D and Media using Device No %d \n", render_device->device_no);
-  } else if (hybrid_mode_3d) {
+  if (hybrid_mode_3d) {
     ETRACE("Hybrid Mode for 3D using Device No %d \n", render_device->device_no);
   } else if (hybrid_mode_media) {
     ETRACE("Hybrid Mode for Media using Device No %d \n", media_device->device_no);
+  } else if (!force_disable_hybrid_mode) {
+    ETRACE("Hybrid Mode not enabled. Using Device No %d for everything as only one device available. \n", scanout_device->device_no);
+  }  else if (!scanout_is_intel_gpu) {
+    ETRACE("Hybrid Mode not enabled. Using Device No %d for everything. Force Disabled as Intel GPU is not used for scanout. \n", scanout_device->device_no);
   } else {
-    ETRACE("Hybrid Mode not enabled. Using Device No %d for everything. \n", media_device->device_no);
+    ETRACE("Hybrid Mode not enabled. Using Device No %d for everything. Force Disabled by user. \n", scanout_device->device_no);
   }
 
   print_all_devices();
