@@ -276,6 +276,9 @@ struct HwcLayer {
   void SetUseForMosaic(bool use_for_mosaic);
   bool GetUseForMosaic() const;
 
+  void SetDeviceNumber(uint32_t device_number);
+  uint32_t GetDeviceNumber() const;
+
   /**
    * API for getting damage area caused by this layer for current
    * frame update.
@@ -326,6 +329,7 @@ struct HwcLayer {
   uint32_t display_frame_height_ = 0;
   uint8_t alpha_ = 0xff;
   uint32_t dataspace_ = 0;
+  uint32_t device_num_ = 0;
   HwcRect<float> source_crop_;
   HwcRect<int> display_frame_;
   HwcRect<int> surface_damage_;

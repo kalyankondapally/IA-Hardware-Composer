@@ -249,6 +249,11 @@ struct OverlayLayer {
     return (uint8_t*)&solid_color_;
   }
 
+  void SetDeviceNumber(uint32_t device_num);
+  uint32_t GetDeviceNumber() const {
+    return device_num_;
+  }
+
   void CloneLayer(const OverlayLayer* layer, const HwcRect<int>& display_frame,
                   ResourceManager* resource_manager, uint32_t z_order);
 
@@ -304,6 +309,7 @@ struct OverlayLayer {
   uint32_t display_frame_height_ = 0;
   uint8_t alpha_ = 0xff;
   uint32_t dataspace_ = 0;
+  uint32_t device_num_ = 0;
 
   uint32_t solid_color_ = 0;
 

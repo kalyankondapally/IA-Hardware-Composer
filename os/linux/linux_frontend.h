@@ -41,7 +41,7 @@ class IAHWC : public iahwc_device {
    public:
     IAHWCLayer(PixelUploader* uploader);
     ~IAHWCLayer() override;
-    int SetBo(gbm_bo* bo);
+    int SetBo(gbm_bo* bo, uint32_t device_num);
     int SetRawPixelData(iahwc_raw_pixel_data bo);
     int SetAcquireFence(int32_t acquire_fence);
     int SetLayerUsage(int32_t layer_usage);

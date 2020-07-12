@@ -52,7 +52,7 @@ struct HwcLayer;
 class DrmDisplay : public PhysicalDisplay {
  public:
   DrmDisplay(uint32_t gpu_fd, uint32_t pipe_id, uint32_t crtc_id,
-             DrmDisplayManager *manager);
+             uint32_t device_num, DrmDisplayManager *manager);
   ~DrmDisplay() override;
 
   bool GetDisplayAttribute(uint32_t config, HWCDisplayAttribute attribute,

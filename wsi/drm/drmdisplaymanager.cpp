@@ -100,7 +100,7 @@ bool DrmDisplayManager::Initialize(int* scanout_device_no) {
     }
 
     std::unique_ptr<DrmDisplay> display(
-        new DrmDisplay(fd_, i, c->crtc_id, this));
+        new DrmDisplay(fd_, i, c->crtc_id, device_num_, this));
 
     displays_.emplace_back(std::move(display));
 
@@ -241,6 +241,8 @@ void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no)
    device = devices[preferred_device];
    // Pass the preffered device setting to the caller.
    *scanout_device_no = preferred_device;
+   device_num_ = preferred_device;
+
    int drm_node = DRM_NODE_PRIMARY;
    // We don't do any sanity checks here. If we cannot open as primary device, we just fail the initialization.
    fd_ = open(device->nodes[drm_node], O_RDWR | FD_CLOEXEC, 0);

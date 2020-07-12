@@ -30,7 +30,8 @@
 namespace hwcomposer {
 
 DisplayPlaneManager::DisplayPlaneManager(DisplayPlaneHandler *plane_handler,
-                                         ResourceManager *resource_manager)
+                                         ResourceManager *resource_manager,
+                                         uint32_t device_num)
     : plane_handler_(plane_handler),
       resource_manager_(resource_manager),
       cursor_plane_(nullptr),
@@ -38,6 +39,7 @@ DisplayPlaneManager::DisplayPlaneManager(DisplayPlaneHandler *plane_handler,
       height_(0),
       total_overlays_(0),
       display_transform_(kIdentity),
+      device_num_(device_num),
       release_surfaces_(false) {
 }
 
@@ -240,8 +242,10 @@ bool DisplayPlaneManager::ValidateLayers(
           // If we are able to composite buffer with the given plane, lets use
           // it.
           bool fall_back = false;
-          if (plane)
+          if (plane) {
+              ETRACE("fallbacktogpu called \n");
             fall_back = FallbacktoGPU(plane, layer, composition);
+          }
           test_commit_done = true;
           if (fall_back) {
             ISURFACETRACE(
@@ -259,6 +263,9 @@ bool DisplayPlaneManager::ValidateLayers(
               "Added Layer into last plane(InUse): %d %d "
               "validate_final_layers: %d  \n",
               layer->GetZorder(), composition.size(), validate_final_layers);
+          if (layer->GetDeviceNumber() != device_num_) {
+            ETRACE("Layer from a different device, Need to force gpu composition1 \n");
+          }
           last_plane.AddLayer(layer);
         }
 
@@ -286,6 +293,9 @@ bool DisplayPlaneManager::ValidateLayers(
       if (fall_back) {
         composition.pop_back();
         // fallback to GPU compostion for cursor layers
+        if (cursor_layers[0]->GetDeviceNumber() != device_num_) {
+          ETRACE("Layer from a different device, Need to force gpu composition2 \n");
+        }
         composition.back().AddLayer(cursor_layers[0]);
       }
     }
@@ -565,6 +575,11 @@ bool DisplayPlaneManager::FallbacktoGPU(
   // SolidColor can't be scanout directly
 
   layer->SupportedDisplayComposition(OverlayLayer::kGpu);
+  if (layer->GetDeviceNumber() != device_num_) {
+    ETRACE("Layer from a different device, forcing gpu composition \n");
+    return true;
+  }
+
   if (layer->IsSolidColor())
     return true;
   // We need video process to apply effects
@@ -627,6 +642,9 @@ void DisplayPlaneManager::ForceVppForAllLayers(
 
   for (auto i = layer_begin; i != layer_end; ++i) {
     ISURFACETRACE("Added layer in ForceVPPForAllLayers: %d \n", i->GetZorder());
+    if (i->GetDeviceNumber() != device_num_) {
+      ETRACE("Layer from a different device, Need to force gpu composition3 \n");
+    }
     last_plane.AddLayer(&(*(i)), true);
     i->SetLayerComposition(OverlayLayer::kGpu);
   }
@@ -673,6 +691,9 @@ void DisplayPlaneManager::ForceGpuForAllLayers(
 
   for (auto i = layer_begin; i != layer_end; ++i) {
     ISURFACETRACE("Added layer in ForceGpuForAllLayers: %d \n", i->GetZorder());
+    if (i->GetDeviceNumber() != device_num_) {
+      ETRACE("Layer from a different device, Need to force gpu composition4 \n");
+    }
     last_plane.AddLayer(&(*(i)), true);
     i->SetLayerComposition(OverlayLayer::kGpu);
   }
@@ -900,6 +921,9 @@ size_t DisplayPlaneManager::SquashNonVideoPlanes(
       ISURFACETRACE("Squasing non video planes. \n");
       const std::vector<size_t> &new_layers = last_plane.GetSourceLayers();
       for (const size_t &index : new_layers) {
+          if (layers.at(index).GetDeviceNumber() != device_num_) {
+            ETRACE("Layer from a different device, Need to force gpu composition10 \n");
+          }
         scanout_plane.AddLayer(&(layers.at(index)));
       }
 
@@ -969,6 +993,9 @@ bool DisplayPlaneManager::SquashPlanesAsNeeded(
       ISURFACETRACE("Squasing planes. \n");
       const std::vector<size_t> &new_layers = last_plane.GetSourceLayers();
       for (const size_t &index : new_layers) {
+          if (layers.at(index).GetDeviceNumber() != device_num_) {
+            ETRACE("Layer from a different device, Need to force gpu composition11 \n");
+          }
         scanout_plane.AddLayer(&(layers.at(index)));
       }
 

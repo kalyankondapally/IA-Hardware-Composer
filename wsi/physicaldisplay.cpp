@@ -33,12 +33,13 @@
 
 namespace hwcomposer {
 
-PhysicalDisplay::PhysicalDisplay(uint32_t gpu_fd, uint32_t pipe_id)
+PhysicalDisplay::PhysicalDisplay(uint32_t gpu_fd, uint32_t pipe_id, uint32_t device_num)
     : pipe_(pipe_id),
       width_(0),
       height_(0),
       custom_resolution_(false),
       gpu_fd_(gpu_fd),
+      device_num_(device_num),
       power_mode_(kOn) {
 }
 
@@ -165,7 +166,7 @@ void PhysicalDisplay::Connect() {
   display_state_ |= kNotifyClient;
   IHOTPLUGEVENTTRACE("PhysicalDisplay::Connect recieved. %p \n", this);
 
-  if (!display_queue_->Initialize(pipe_, width_, height_, this)) {
+  if (!display_queue_->Initialize(pipe_, device_num_, width_, height_, this)) {
     ETRACE("Failed to initialize Display Queue.");
   } else {
     display_state_ |= kInitialized;

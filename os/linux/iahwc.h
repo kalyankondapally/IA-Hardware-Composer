@@ -189,7 +189,8 @@ typedef int (*IAHWC_PFN_DESTROY_LAYER)(iahwc_device_t*,
 typedef int (*IAHWC_PFN_LAYER_SET_BO)(iahwc_device_t*,
                                       iahwc_display_t display_handle,
                                       iahwc_layer_t layer_handle,
-                                      struct gbm_bo*);
+                                      struct gbm_bo*,
+                                      uint32_t device_number);
 typedef int (*IAHWC_PFN_LAYER_SET_RAW_PIXEL_DATA)(
     iahwc_device_t*, iahwc_display_t display_handle, iahwc_layer_t layer_handle,
     struct iahwc_raw_pixel_data);

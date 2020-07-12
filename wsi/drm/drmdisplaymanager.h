@@ -125,6 +125,7 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   bool ignore_updates_ = false;
   int fd_ = -1;
   int offscreen_fd_ = -1;
+  uint32_t device_num_ = 0;
   int hotplug_fd_ = -1;
   bool notify_client_ = false;
   bool release_lock_ = false;

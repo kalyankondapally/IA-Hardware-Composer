@@ -37,7 +37,7 @@ struct OverlayLayer;
 class DisplayPlaneManager {
  public:
   DisplayPlaneManager(DisplayPlaneHandler *plane_handler,
-                      ResourceManager *resource_manager);
+                      ResourceManager *resource_manager, uint32_t device_no);
 
   virtual ~DisplayPlaneManager();
 
@@ -164,6 +164,7 @@ class DisplayPlaneManager {
   uint32_t height_;
   uint32_t total_overlays_;
   uint32_t display_transform_;
+  uint32_t device_num_ = 0;
   bool release_surfaces_;
 };
 

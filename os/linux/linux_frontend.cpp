@@ -194,7 +194,7 @@ iahwc_function_ptr_t IAHWC::HookGetFunctionPtr(iahwc_device_t* /* device */,
                       &IAHWCDisplay::DestroyLayer, uint32_t>);
     case IAHWC_FUNC_LAYER_SET_BO:
       return ToHook<IAHWC_PFN_LAYER_SET_BO>(
-          LayerHook<decltype(&IAHWCLayer::SetBo), &IAHWCLayer::SetBo, gbm_bo*>);
+          LayerHook<decltype(&IAHWCLayer::SetBo), &IAHWCLayer::SetBo, gbm_bo*, uint32_t>);
     case IAHWC_FUNC_LAYER_SET_RAW_PIXEL_DATA:
       return ToHook<IAHWC_PFN_LAYER_SET_RAW_PIXEL_DATA>(
           LayerHook<decltype(&IAHWCLayer::SetRawPixelData),
@@ -490,7 +490,7 @@ IAHWC::IAHWCLayer::~IAHWCLayer() {
   }
 }
 
-int IAHWC::IAHWCLayer::SetBo(gbm_bo* bo) {
+int IAHWC::IAHWCLayer::SetBo(gbm_bo* bo, uint32_t device_num) {
   int32_t width, height;
 
   if (pixel_buffer_) {
@@ -522,6 +522,7 @@ int IAHWC::IAHWCLayer::SetBo(gbm_bo* bo) {
   hwc_handle_.gbm_flags = 0;
 
   iahwc_layer_.SetNativeHandle(&hwc_handle_);
+  iahwc_layer_.SetDeviceNumber(device_num);
 
   return IAHWC_ERROR_NONE;
 }

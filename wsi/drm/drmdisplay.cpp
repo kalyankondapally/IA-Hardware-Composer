@@ -43,9 +43,9 @@ namespace hwcomposer {
 
 static const int32_t kUmPerInch = 25400;
 
-DrmDisplay::DrmDisplay(uint32_t gpu_fd, uint32_t pipe_id, uint32_t crtc_id,
+DrmDisplay::DrmDisplay(uint32_t gpu_fd, uint32_t pipe_id, uint32_t crtc_id, uint32_t device_num,
                        DrmDisplayManager *manager)
-    : PhysicalDisplay(gpu_fd, pipe_id),
+    : PhysicalDisplay(gpu_fd, pipe_id, device_num),
       crtc_id_(crtc_id),
       connector_(0),
       manager_(manager) {

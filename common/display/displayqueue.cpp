@@ -71,7 +71,7 @@ DisplayQueue::DisplayQueue(uint32_t gpu_fd, bool disable_explictsync,
 DisplayQueue::~DisplayQueue() {
 }
 
-bool DisplayQueue::Initialize(uint32_t pipe, uint32_t width, uint32_t height,
+bool DisplayQueue::Initialize(uint32_t pipe, uint32_t device_num, uint32_t width, uint32_t height,
                               DisplayPlaneHandler* plane_handler) {
   if (!resource_manager_) {
     ETRACE("Failed to construct hwc layer buffer manager");
@@ -79,7 +79,7 @@ bool DisplayQueue::Initialize(uint32_t pipe, uint32_t width, uint32_t height,
   }
 
   display_plane_manager_.reset(
-      new DisplayPlaneManager(plane_handler, resource_manager_.get()));
+      new DisplayPlaneManager(plane_handler, resource_manager_.get(), device_num));
   if (!display_plane_manager_->Initialize(width, height)) {
     ETRACE("Failed to initialize DisplayPlane Manager.");
     return false;
@@ -234,6 +234,8 @@ void DisplayQueue::InitializeOverlayLayers(
       previous_layer = &(in_flight_layers_.at(z_order));
     }
 
+    overlay_layer->SetDeviceNumber(layer->GetDeviceNumber());
+
     if (scaling_tracker_.scaling_state_ == ScalingTracker::kNeedsScaling) {
       HwcRect<int> display_frame = layer->GetDisplayFrame();
       display_frame.left =
@@ -288,6 +290,11 @@ void DisplayQueue::InitializeOverlayLayers(
             }
           }
         }
+
+        if(!need_revalidate && (overlay_layer->GetDeviceNumber() != previous_layer->GetDeviceNumber())) {
+          need_revalidate = true;
+        }
+
         if (need_revalidate)
           re_validate_begin = layer_index;
       }
@@ -367,6 +374,7 @@ bool DisplayQueue::AssignAndCommitPlanes(
   if (render_layers) {
     compositor_.BeginFrame(disable_explictsync);
     // Prepare for final composition.
+    ETRACE("Draw called \n");
     if (!compositor_.Draw(current_composition_planes, layers)) {
       ETRACE("Failed to prepare for the frame composition. ");
       composition_passed = false;
@@ -516,6 +524,7 @@ bool DisplayQueue::QueueUpdate(std::vector<HwcLayer*>& source_layers,
     validate_layers = true;
   if (validate_layers)
     re_validate_begin = 0;
+  ETRACE("validate layers %d \n", validate_layers);
 
   bool force_media_composition = false;
   bool requested_video_effect = false;
@@ -560,7 +569,7 @@ bool DisplayQueue::QueueUpdate(std::vector<HwcLayer*>& source_layers,
   if (call_back) {
     call_back->Synchronize();
   }
-
+  ETRACE("AssignAndCommitPlanes called %d \n", validate_layers);
   return AssignAndCommitPlanes(
       layers, &source_layers, validate_layers, re_validate_begin,
       force_media_composition && requested_video_effect, retire_fence,

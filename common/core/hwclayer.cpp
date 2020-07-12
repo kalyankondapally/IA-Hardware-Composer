@@ -436,6 +436,14 @@ bool HwcLayer::GetUseForMosaic() const {
   return use_for_mosaic_;
 }
 
+void HwcLayer::SetDeviceNumber(uint32_t device_num) {
+  device_num_ = device_num;
+}
+
+uint32_t HwcLayer::GetDeviceNumber() const {
+  return device_num_;
+}
+
 void HwcLayer::UpdateRenderingDamage(const HwcRect<int>& old_rect,
                                      const HwcRect<int>& newrect,
                                      bool same_rect) {

@@ -44,7 +44,7 @@ struct HwcLayer;
 
 class PhysicalDisplay : public NativeDisplay, public DisplayPlaneHandler {
  public:
-  PhysicalDisplay(uint32_t gpu_fd, uint32_t pipe_id);
+  PhysicalDisplay(uint32_t gpu_fd, uint32_t pipe_id, uint32_t device_num);
   ~PhysicalDisplay() override;
 
   bool Initialize(NativeBufferHandler *buffer_handler) override;
@@ -294,6 +294,7 @@ class PhysicalDisplay : public NativeDisplay, public DisplayPlaneHandler {
   HwcRect<int32_t> rect_;
   int32_t custom_resolution_;
   uint32_t gpu_fd_;
+  uint32_t device_num_;
   uint32_t power_mode_ = kOn;
   int display_state_ = kNone;
   int connection_state_ = kDisconnected;

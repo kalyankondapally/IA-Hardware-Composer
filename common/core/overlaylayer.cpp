@@ -581,6 +581,10 @@ void OverlayLayer::ValidateForOverlayUsage() {
   type_ = buffer->GetUsage();
 }
 
+void OverlayLayer::SetDeviceNumber(uint32_t device_num) {
+  device_num_ = device_num;
+}
+
 void OverlayLayer::CloneLayer(const OverlayLayer* layer,
                               const HwcRect<int>& display_frame,
                               ResourceManager* resource_manager,
