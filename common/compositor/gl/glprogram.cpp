@@ -358,7 +358,7 @@ void GLProgram::UseProgram(const RenderState &state, GLuint viewport_width,
     glUniformMatrix2fv(tex_matrix_loc_ + src_index, 1, GL_FALSE,
                        src.texture_matrix_);
     glActiveTexture(GL_TEXTURE0 + src_index);
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, src.handle_);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, src.handle_.texture_);
     glUniform4f(solid_color_loc_ + src_index, (float)src.solid_color_array_[3],
                 (float)src.solid_color_array_[2],
                 (float)src.solid_color_array_[1],

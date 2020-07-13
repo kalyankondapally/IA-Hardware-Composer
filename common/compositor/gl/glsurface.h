@@ -34,6 +34,7 @@ class GLSurface : public NativeSurface {
  private:
   bool InitializeGPUResources();
   GLuint fb_ = 0;
+  GLuint texture_id_ =0;
 };
 
 }  // namespace hwcomposer

@@ -1149,7 +1149,7 @@ int main(int argc, char *argv[]) {
       backend->iahwc_layer_set_surface_damage(iahwc_device, 0, frame->layers[j],
                                               damage_region);
       backend->iahwc_layer_set_bo(iahwc_device, 0, frame->layers[j],
-                                  frame->layer_bos[j], 0 /*frame->layer_renderers[j]->GetDeviceNo()*/);
+                                  frame->layer_bos[j], frame->layer_renderers[j]->GetDeviceNo());
     }
 
     backend->iahwc_present_display(iahwc_device, 0, &frame->kms_fence);

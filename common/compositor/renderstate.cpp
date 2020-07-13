@@ -48,6 +48,13 @@ void RenderState::ConstructState(std::vector<OverlayLayer> &layers,
     RenderState::LayerState &src = layer_state_.back();
     src.layer_index_ = texture_index;
     src.solid_color_array_ = layer.GetSolidColorArray();
+    src.width_ = layer.GetSourceCropWidth();
+    src.height_ = layer.GetSourceCropHeight();
+    src.needs_blit_ = !layer.IsLayerDeviceResident();
+    if (!needs_blit_) {
+      needs_blit_ = src.needs_blit_;
+    }
+
     bool swap_xy = false;
     bool flip_xy[2] = {false, false};
     uint32_t transform = layer.GetTransform();

@@ -577,6 +577,7 @@ bool DisplayPlaneManager::FallbacktoGPU(
   layer->SupportedDisplayComposition(OverlayLayer::kGpu);
   if (layer->GetDeviceNumber() != device_num_) {
     ETRACE("Layer from a different device, forcing gpu composition \n");
+    layer->SetDeviceResident(false);
     return true;
   }
 

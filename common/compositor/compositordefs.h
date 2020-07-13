@@ -52,7 +52,10 @@ typedef struct dc_import {
 } ResourceHandle;
 typedef void* GpuDisplay;
 #elif USE_GL
-typedef unsigned GpuResourceHandle;
+typedef struct gl_resource {
+  GLuint texture_ = 0;
+  GLuint fb_ = 0;
+} GpuResourceHandle;
 typedef struct gl_import {
   EGLImageKHR image_ = 0;
   GLuint texture_ = 0;

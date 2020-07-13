@@ -254,6 +254,12 @@ struct OverlayLayer {
     return device_num_;
   }
 
+  bool IsLayerDeviceResident() const {
+    return device_resident_;
+  }
+
+  void SetDeviceResident(bool resident);
+
   void CloneLayer(const OverlayLayer* layer, const HwcRect<int>& display_frame,
                   ResourceManager* resource_manager, uint32_t z_order);
 
@@ -312,6 +318,7 @@ struct OverlayLayer {
   uint32_t device_num_ = 0;
 
   uint32_t solid_color_ = 0;
+  bool device_resident_ = true;
 
   HwcRect<float> source_crop_;
   HwcRect<int> display_frame_;

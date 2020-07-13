@@ -25,6 +25,17 @@
 #include "hwcutils.h"
 #endif
 
+#include <GLES2/gl2.h>
+#include <GLES3/gl3.h>
+
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#endif
+#ifndef GL_DRAW_FRAMEBUFFER
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#endif
+
+
 namespace hwcomposer {
 
 GLRenderer::~GLRenderer() {
@@ -138,6 +149,37 @@ bool GLRenderer::Draw(const std::vector<RenderState> &render_states,
 #endif
   for (const RenderState &state : render_states) {
     unsigned size = state.layer_state_.size();
+    if (state.needs_blit_) {
+      glScissor(state.scissor_x_, state.scissor_y_, state.scissor_width_, state.scissor_height_);
+      for (unsigned src_index = 0; src_index < size; src_index++) {
+        const RenderState::LayerState &src = state.layer_state_[src_index];
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, src.handle_.fb_);
+        ETRACE("USing FrameBuffer Blit %d \n", src.handle_.fb_);
+        GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+          switch (status) {
+            case (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT):
+              ETRACE("GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT.");
+              break;
+            case (GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT):
+              ETRACE("GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT.");
+              break;
+            case (GL_FRAMEBUFFER_UNSUPPORTED):
+              ETRACE("GL_FRAMEBUFFER_UNSUPPORTED.");
+              break;
+            default:
+              break;
+          }
+
+          ETRACE("GL Framebuffer is not complete for read %d.", src.handle_.fb_);
+        }
+
+        glBlitFramebuffer(0, src.height_, src.width_, 0, 0, 0, src.width_, src.height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      }
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+      glDisable(GL_SCISSOR_TEST);
+    } else {
+
     GLProgram *program = GetProgram(size);
     if (!program)
       continue;
@@ -172,6 +214,7 @@ bool GLRenderer::Draw(const std::vector<RenderState> &render_states,
   }
 
   glDisable(GL_SCISSOR_TEST);
+  }
 
   if (!disable_explicit_sync_)
     surface->SetNativeFence(context_.GetSyncFD(surface->IsOnScreen()));

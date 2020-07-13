@@ -117,6 +117,7 @@ void OverlayLayer::SetBuffer(HWCNativeHandle handle, int32_t acquire_fence,
 
   imported_buffer_.reset(new ImportedBuffer(buffer, acquire_fence));
   ValidateForOverlayUsage();
+  buffer->SetDeviceResident(device_resident_);
 }
 
 void OverlayLayer::SetBlending(HWCBlending blending) {
@@ -486,11 +487,15 @@ void OverlayLayer::InitializeFromScaledHwcLayer(
 void OverlayLayer::ValidatePreviousFrameState(OverlayLayer* rhs,
                                               HwcLayer* layer) {
   OverlayBuffer* buffer = NULL;
-  if (imported_buffer_.get())
+  if (imported_buffer_.get()) {
     buffer = imported_buffer_->buffer_.get();
+  }
 
   supported_composition_ = rhs->supported_composition_;
   actual_composition_ = rhs->actual_composition_;
+  device_resident_ = rhs->device_resident_;
+  if (buffer)
+    buffer->SetDeviceResident(device_resident_);
 
   bool content_changed = false;
   bool rect_changed = layer->HasDisplayRectChanged();
@@ -585,6 +590,11 @@ void OverlayLayer::SetDeviceNumber(uint32_t device_num) {
   device_num_ = device_num;
 }
 
+void OverlayLayer::SetDeviceResident(bool resident) {
+  device_resident_ = resident;
+  imported_buffer_->buffer_->SetDeviceResident(device_resident_);
+}
+
 void OverlayLayer::CloneLayer(const OverlayLayer* layer,
                               const HwcRect<int>& display_frame,
                               ResourceManager* resource_manager,
@@ -597,6 +607,8 @@ void OverlayLayer::CloneLayer(const OverlayLayer* layer,
   SetDisplayFrame(display_frame);
   SetSourceCrop(layer->GetSourceCrop());
   OverlayBuffer* layer_buffer = layer->GetBuffer();
+  device_resident_ = layer->device_resident_;
+  device_num_ = layer->device_num_;
   if (layer_buffer) {
     SetBuffer(layer_buffer->GetOriginalHandle(), aquire_fence, resource_manager,
               true);

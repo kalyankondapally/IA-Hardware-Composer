@@ -248,7 +248,7 @@ const ResourceHandle& DrmBuffer::GetGpuResource(GpuDisplay egl_display,
   }
 
   GLenum target = GL_TEXTURE_EXTERNAL_OES;
-  if (!external_import) {
+  if (!external_import || !device_resident_) {
     target = GL_TEXTURE_2D;
   }
 
@@ -261,11 +261,15 @@ const ResourceHandle& DrmBuffer::GetGpuResource(GpuDisplay egl_display,
   glBindTexture(target, image_.texture_);
   glEGLImageTargetTexture2DOES(target, (GLeglImageOES)image_.image_);
 
-  glBindTexture(target, 0);
-
-  if (!external_import && image_.fb_ == 0) {
+  if (image_.fb_ == 0 && target == GL_TEXTURE_2D) {
     glGenFramebuffers(1, &image_.fb_);
+    glBindFramebuffer(GL_FRAMEBUFFER, image_.fb_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target,
+                           image_.texture_, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+
+  glBindTexture(target, 0);
 #elif USE_VK
   if (image_.image_ == VK_NULL_HANDLE) {
     VkDevice dev = egl_display;
@@ -420,6 +424,10 @@ bool DrmBuffer::CreateFrameBufferWithModifier(uint64_t modifier) {
 
 void DrmBuffer::SetOriginalHandle(HWCNativeHandle handle) {
   original_handle_ = handle;
+}
+
+void DrmBuffer::SetDeviceResident(bool resident) {
+  device_resident_ = resident;
 }
 
 void DrmBuffer::Dump() {

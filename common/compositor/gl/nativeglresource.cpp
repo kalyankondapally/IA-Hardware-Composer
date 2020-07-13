@@ -24,10 +24,12 @@ namespace hwcomposer {
 
 bool NativeGLResource::PrepareResources(
     const std::vector<OverlayBuffer*>& buffers) {
-  std::vector<GLuint>().swap(layer_textures_);
+  std::vector<GpuResourceHandle>().swap(layer_textures_);
   layer_textures_.reserve(buffers.size());
   EGLDisplay egl_display = eglGetCurrentDisplay();
   for (auto& buffer : buffers) {
+    layer_textures_.emplace_back();
+     GpuResourceHandle& resouce = layer_textures_.back();
     // Create EGLImage.
     if (buffer) {
       const ResourceHandle& import_image =
@@ -38,9 +40,12 @@ bool NativeGLResource::PrepareResources(
         return false;
       }
 
-      layer_textures_.emplace_back(import_image.texture_);
-    } else
-      layer_textures_.emplace_back(0);
+      resouce.texture_ = import_image.texture_;
+      resouce.fb_ = import_image.fb_;
+    } else {
+      resouce.texture_ = 0;
+      resouce.fb_ = 0;
+    }
   }
 
   return true;
@@ -87,8 +92,12 @@ void NativeGLResource::ReleaseGPUResources(
 
 GpuResourceHandle NativeGLResource::GetResourceHandle(
     uint32_t layer_index) const {
-  if (layer_textures_.size() < layer_index)
-    return 0;
+  if (layer_textures_.size() < layer_index) {
+    GpuResourceHandle temp;
+    temp.texture_ = 0;
+    temp.fb_ = 0;
+    return temp;
+  }
 
   return layer_textures_.at(layer_index);
 }

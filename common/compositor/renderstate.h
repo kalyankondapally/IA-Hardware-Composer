@@ -40,8 +40,11 @@ struct RenderState {
     float premult_;
     float texture_matrix_[4];
     uint32_t layer_index_;
+    uint32_t width_ = 0;
+    uint32_t height_ = 0;
     uint8_t *solid_color_array_;
     GpuResourceHandle handle_;
+    bool needs_blit_ = false;
   };
 
   void ConstructState(std::vector<OverlayLayer> &layers,
@@ -58,6 +61,7 @@ struct RenderState {
   uint32_t scissor_width_;
   uint32_t scissor_height_;
   std::vector<LayerState> layer_state_;
+  bool needs_blit_ = false; // Get rid of this and make it per layer.
 };
 
 struct MediaState {

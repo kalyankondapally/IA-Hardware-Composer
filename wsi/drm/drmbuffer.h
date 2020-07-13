@@ -114,11 +114,14 @@ class DrmBuffer : public OverlayBuffer {
 
   void SetOriginalHandle(HWCNativeHandle handle) override;
 
+  void SetDeviceResident(bool resident) override;
+
   void Dump() override;
 
  private:
   void Initialize(const HwcMeta& meta);
   bool CreateFrameBuffer();
+  bool device_resident_ = true;
   uint32_t format_ = 0;
   uint32_t frame_buffer_format_ = 0;
   uint32_t previous_width_ = 0;   // For Media usage.

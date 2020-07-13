@@ -21,6 +21,10 @@
 #include "resourcemanager.h"
 #include "shim.h"
 
+#ifndef GL_DRAW_FRAMEBUFFER
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#endif
+
 namespace hwcomposer {
 
 GLSurface::GLSurface(uint32_t width, uint32_t height)
@@ -48,12 +52,19 @@ bool GLSurface::InitializeGPUResources() {
 
   // Bind Fb.
   fb_ = import.fb_;
-  glBindFramebuffer(GL_FRAMEBUFFER, fb_);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         import.texture_, 0);
+  texture_id_ = import.texture_;
+  return true;
+}
 
-  fb_ = import.fb_;
-  GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+bool GLSurface::MakeCurrent() {
+  if (!fb_ && !InitializeGPUResources()) {
+    ETRACE("Failed to initialize gpu resources.");
+    return false;
+  }
+
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fb_);
+  glBindTexture(GL_TEXTURE_2D, texture_id_);
+  GLenum status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
   if (status != GL_FRAMEBUFFER_COMPLETE) {
     switch (status) {
       case (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT):
@@ -69,20 +80,10 @@ bool GLSurface::InitializeGPUResources() {
         break;
     }
 
-    ETRACE("GL Framebuffer is not complete %d.", import.texture_);
+    ETRACE("GL Framebuffer is not complete %d.", fb_);
     return false;
   }
 
-  return true;
-}
-
-bool GLSurface::MakeCurrent() {
-  if (!fb_ && !InitializeGPUResources()) {
-    ETRACE("Failed to initialize gpu resources.");
-    return false;
-  }
-
-  glBindFramebuffer(GL_FRAMEBUFFER, fb_);
   return true;
 }
 
