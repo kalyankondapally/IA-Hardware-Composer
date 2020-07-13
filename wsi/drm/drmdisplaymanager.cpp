@@ -202,6 +202,7 @@ void DrmDisplayManager::PrintDeviceInfo(drmDevicePtr device, int i, bool print_r
 void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no) {
 #define MAX_DRM_DEVICES 64
   drmDevicePtr devices[MAX_DRM_DEVICES], device;
+  std::string card_path("/dev/dri/card0");
   int i, ret, num_devices, preferred_device = 0;
 
   num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
@@ -232,6 +233,13 @@ void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no)
       continue;
     }
 
+    // We assume Card0 is expected to drive Display
+    if (std::string(device->nodes[drm_node]).compare(card_path) != 0) {
+      ETRACE(" Found a device but not card0 skipping \n");
+      continue;
+    }
+
+    ETRACE(" Found a device which is card0 \n");
     // TODO: ADD check to see if the device is iGFX or dGFX.
     // Found Intel GPU break.
     preferred_device = i;
