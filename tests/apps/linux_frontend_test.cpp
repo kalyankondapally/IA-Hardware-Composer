@@ -548,15 +548,14 @@ static void init_frames(int32_t width, int32_t height, struct device_info* rende
     uint32_t gbm_format =
         layerformat2gbmformat(layer_parameter.format, &usage_format, &usage);
     struct device_info* gl_renderer = render_device;
+    if (layer_parameter.prefer_device == 0) {
+      gl_renderer = scanout_device;
+    } else if (layer_parameter.prefer_device == 2) {
+      gl_renderer = media_device;
+    }
 
     switch (layer_parameter.type) {
       case LAYER_TYPE_GL:
-        if (layer_parameter.prefer_device == 0) {
-          gl_renderer = scanout_device;
-        } else if (layer_parameter.prefer_device == 2) {
-          gl_renderer = media_device;
-        }
-
         renderer = new GLCubeLayerRenderer(gl_renderer->buffer_handler, false, gl_renderer->device_no);
         if (!renderer->Init(layer_parameter.source_width,
                             layer_parameter.source_height, gbm_format, usage_format,
@@ -565,6 +564,16 @@ static void init_frames(int32_t width, int32_t height, struct device_info* rende
           exit(-1);
         }
         break;
+    case LAYER_TYPE_VIDEO:
+      renderer = new VideoLayerRenderer(gl_renderer->buffer_handler, gl_renderer->device_no);
+      if (!renderer->Init(layer_parameter.source_width,
+                          layer_parameter.source_height, gbm_format, usage_format,
+                          usage, NULL, layer_parameter.resource_path.c_str())) {
+        printf("\nrender init not successful\n");
+        exit(-1);
+      }
+
+      break;
       default:
         printf("un-recognized layer type!\n");
         exit(-1);

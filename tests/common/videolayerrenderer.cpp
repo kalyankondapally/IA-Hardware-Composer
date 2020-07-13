@@ -21,8 +21,8 @@
 #include <nativebufferhandler.h>
 
 VideoLayerRenderer::VideoLayerRenderer(
-    hwcomposer::NativeBufferHandler* buffer_handler)
-    : LayerRenderer(buffer_handler) {
+    hwcomposer::NativeBufferHandler* buffer_handler, int device_no)
+    : LayerRenderer(buffer_handler, device_no) {
 }
 
 VideoLayerRenderer::~VideoLayerRenderer() {

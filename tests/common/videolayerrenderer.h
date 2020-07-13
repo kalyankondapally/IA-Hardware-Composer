@@ -23,7 +23,7 @@
 
 class VideoLayerRenderer : public LayerRenderer {
  public:
-  VideoLayerRenderer(hwcomposer::NativeBufferHandler* buffer_handler);
+  VideoLayerRenderer(hwcomposer::NativeBufferHandler* buffer_handler, int device_no = -1);
   ~VideoLayerRenderer() override;
 
   bool Init(uint32_t width, uint32_t height, uint32_t format,
