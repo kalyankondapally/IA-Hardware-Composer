@@ -64,6 +64,7 @@ bool GLSurface::MakeCurrent() {
 
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fb_);
   glBindTexture(GL_TEXTURE_2D, texture_id_);
+  glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_id_, 0);
   GLenum status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
   if (status != GL_FRAMEBUFFER_COMPLETE) {
     switch (status) {
