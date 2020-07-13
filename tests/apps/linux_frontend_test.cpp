@@ -286,7 +286,7 @@ bool init_gl(glContext* gl, int device_fd) {
   return true;
 }
 
-static struct frame frames[2];
+static struct frame frames[3];
 
 char json_path[1024];
 char log_path[1024];
@@ -481,8 +481,7 @@ static uint32_t layerformat2gbmformat(LAYER_FORMAT format,
 }
 
 static void fill_hwclayer(iahwc_layer_t layer_handle_,
-                          LAYER_PARAMETER *pParameter,
-                          LayerRenderer *pRenderer) {
+                          LAYER_PARAMETER *pParameter) {
   backend->iahwc_layer_set_transform(backend->iahwc_device, 0, layer_handle_,
                                      pParameter->transform);
   backend->iahwc_layer_set_source_crop(
@@ -554,33 +553,33 @@ static void init_frames(int32_t width, int32_t height, struct device_info* rende
       gl_renderer = media_device;
     }
 
-    switch (layer_parameter.type) {
-      case LAYER_TYPE_GL:
-        renderer = new GLCubeLayerRenderer(gl_renderer->buffer_handler, false, gl_renderer->device_no);
-        if (!renderer->Init(layer_parameter.source_width,
-                            layer_parameter.source_height, gbm_format, usage_format,
-                            usage, &gl_renderer->gl, layer_parameter.resource_path.c_str())) {
-          printf("\nrender init not successful\n");
-          exit(-1);
-        }
-        break;
-    case LAYER_TYPE_VIDEO:
-      renderer = new VideoLayerRenderer(gl_renderer->buffer_handler, gl_renderer->device_no);
-      if (!renderer->Init(layer_parameter.source_width,
-                          layer_parameter.source_height, gbm_format, usage_format,
-                          usage, NULL, layer_parameter.resource_path.c_str())) {
-        printf("\nrender init not successful\n");
-        exit(-1);
-      }
+    fill_hwclayer(layer_handle_, &layer_parameter);
 
-      break;
-      default:
-        printf("un-recognized layer type!\n");
-        exit(-1);
-    }
-
-    fill_hwclayer(layer_handle_, &layer_parameter, renderer);
     for (size_t i = 0; i < ARRAY_SIZE(frames); ++i) {
+        switch (layer_parameter.type) {
+          case LAYER_TYPE_GL:
+            renderer = new GLCubeLayerRenderer(gl_renderer->buffer_handler, false, gl_renderer->device_no);
+            if (!renderer->Init(layer_parameter.source_width,
+                                layer_parameter.source_height, gbm_format, usage_format,
+                                usage, &gl_renderer->gl, layer_parameter.resource_path.c_str())) {
+              printf("\nrender init not successful\n");
+              exit(-1);
+            }
+            break;
+        case LAYER_TYPE_VIDEO:
+          renderer = new VideoLayerRenderer(gl_renderer->buffer_handler, gl_renderer->device_no);
+          if (!renderer->Init(layer_parameter.source_width,
+                              layer_parameter.source_height, gbm_format, usage_format,
+                              usage, NULL, layer_parameter.resource_path.c_str())) {
+            printf("\nrender init not successful\n");
+            exit(-1);
+          }
+
+          break;
+          default:
+            printf("un-recognized layer type!\n");
+            exit(-1);
+        }
       struct frame *frame = &frames[i];
       frame->layers_fences.resize(LAYER_PARAM_SIZE);
       frame->layers.push_back(layer_handle_);
@@ -1137,14 +1136,13 @@ int main(int argc, char *argv[]) {
   uint32_t in_use_frame = 0;
   for (uint64_t i = 0; arg_frames == 0 || i < arg_frames; ++i) {
     struct frame *frame = &frames[in_use_frame];
+    if (frame->kms_fence != -1) {
+      sync_wait(frame->kms_fence, -1);
+      close(frame->kms_fence);
+      frame->kms_fence = -1;
+    }
 
     for (uint32_t j = 0; j < frame->layers.size(); j++) {
-        if (frame->kms_fence != -1) {
-          sync_wait(frame->kms_fence, -1);
-          close(frame->kms_fence);
-          frame->kms_fence = -1;
-        }
-
       frame->layers_fences[j].clear();
       frame->layer_renderers[j]->Draw(&gpu_fence_fd);
       backend->iahwc_layer_set_acquire_fence(iahwc_device, 0, frame->layers[j],
@@ -1164,7 +1162,7 @@ int main(int argc, char *argv[]) {
     backend->iahwc_present_display(iahwc_device, 0, &frame->kms_fence);
     frame_total++;
     in_use_frame++;
-    if (in_use_frame > 1) {
+    if (in_use_frame > 2) {
       in_use_frame = 0;
     }
   }
