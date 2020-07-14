@@ -40,10 +40,19 @@ class GLRenderer : public Renderer {
 
   void SetDisableExplicitSync(bool disable_explicit_sync) override;
 
+  void MakePrimaryDeviceCurrent() override {
+    context_.MakeCurrent();
+  }
+
+  void MakeSecondaryDeviceCurrent() override {
+    hybrid_context_.MakeCurrent();
+  }
+
  private:
   GLProgram *GetProgram(unsigned texture_count);
 
   EGLOffScreenContext context_;
+  EGLOffScreenContext hybrid_context_;
 
   std::vector<std::unique_ptr<GLProgram>> programs_;
   GLuint vertex_array_ = 0;

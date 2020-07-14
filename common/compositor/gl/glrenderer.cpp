@@ -54,7 +54,7 @@ bool GLRenderer::Init() {
   const GLfloat verts[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f,
                            0.0f, 2.0f, 2.0f, 0.0f, 2.0f, 0.0f};
   // clang-format on
-  if (!context_.Init()) {
+  if (!context_.Init(false)) {
     ETRACE("Failed to initialize EGLContext.");
     return false;
   }
@@ -91,6 +91,12 @@ bool GLRenderer::Init() {
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 
   vertex_array_ = vertex_array;
+
+  // clang-format on
+  if (!hybrid_context_.Init(true)) {
+    ETRACE("Failed to initialize EGLContext.");
+    return false;
+  }
 
   return true;
 }
@@ -147,10 +153,19 @@ bool GLRenderer::Draw(const std::vector<RenderState> &render_states,
       damage.left, damage.top, damage.right - damage.left,
       damage.bottom - damage.top);
 #endif
+  bool context_switched = false;
+  int blit_fence = -1;
   for (const RenderState &state : render_states) {
     unsigned size = state.layer_state_.size();
     if (state.needs_blit_) {
       glScissor(state.scissor_x_, state.scissor_y_, state.scissor_width_, state.scissor_height_);
+      if (!context_switched) {
+        hybrid_context_.MakeCurrent();
+        context_switched = true;
+        if (!surface->MakeCurrent())
+          return false;
+      }
+
       for (unsigned src_index = 0; src_index < size; src_index++) {
         const RenderState::LayerState &src = state.layer_state_[src_index];
         glBindFramebuffer(GL_READ_FRAMEBUFFER, src.handle_.fb_);
@@ -178,7 +193,16 @@ bool GLRenderer::Draw(const std::vector<RenderState> &render_states,
       }
       glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
       glDisable(GL_SCISSOR_TEST);
+      blit_fence = context_.GetSyncFD(surface->IsOnScreen());
     } else {
+
+    if (context_switched) {
+      context_.MakeCurrent();
+      if (!surface->MakeCurrent())
+        return false;
+
+      context_switched = false;
+     }
 
     GLProgram *program = GetProgram(size);
     if (!program)
@@ -217,7 +241,7 @@ bool GLRenderer::Draw(const std::vector<RenderState> &render_states,
   }
 
   if (!disable_explicit_sync_)
-    surface->SetNativeFence(context_.GetSyncFD(surface->IsOnScreen()));
+    surface->SetNativeFence(blit_fence > 0 ? blit_fence : context_.GetSyncFD(surface->IsOnScreen()));
 
   surface->ResetDamage();
 #ifdef COMPOSITOR_TRACING

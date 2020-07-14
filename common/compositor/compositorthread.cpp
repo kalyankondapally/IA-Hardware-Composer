@@ -214,7 +214,7 @@ void CompositorThread::Handle3DDrawRequest() {
 
   gl_renderer_->SetDisableExplicitSync(disable_explicit_sync_);
 
-  if (!gpu_resource_handler_->PrepareResources(buffers_)) {
+  if (!gpu_resource_handler_->PrepareResources(gl_renderer_.get(), buffers_)) {
     ETRACE(
         "Failed to prepare GPU resources for compositing the frame, "
         "error: %s",

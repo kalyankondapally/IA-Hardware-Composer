@@ -89,6 +89,10 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
     return offscreen_fd_;
   }
 
+  uint32_t GetHybridOffScreenFD() const override {
+    return offscreen_hybrid_fd_;
+  }
+
   void NotifyClientsOfDisplayChangeStatus();
 
   void HandleLazyInitialization();
@@ -125,6 +129,7 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   bool ignore_updates_ = false;
   int fd_ = -1;
   int offscreen_fd_ = -1;
+  int offscreen_hybrid_fd_ = -1;
   uint32_t device_num_ = 0;
   int hotplug_fd_ = -1;
   bool notify_client_ = false;

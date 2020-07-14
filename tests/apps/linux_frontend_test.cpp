@@ -1147,6 +1147,7 @@ int main(int argc, char *argv[]) {
   int64_t gpu_fence_fd = -1; /* out-fence from gpu, in-fence to kms */
   uint32_t frame_total = 0;
   uint32_t in_use_frame = 0;
+  bool disable_app_blit = true;
   for (uint64_t i = 0; arg_frames == 0 || i < arg_frames; ++i) {
     struct frame *frame = &frames[in_use_frame];
     if (frame->kms_fence != -1) {
@@ -1159,7 +1160,7 @@ int main(int argc, char *argv[]) {
       frame->layers_fences[j].clear();
       frame->layer_renderers[j]->Draw(&gpu_fence_fd);
       // Make this buffer resident on scanout device in case we are using different device
-      if (frame->layer_renderers[j]->GetDeviceNo() != preferred_scanout_device) {
+      if (!disable_app_blit && (frame->layer_renderers[j]->GetDeviceNo() != preferred_scanout_device)) {
           ETRACE("blitting on client side \n");
           // Setup source
           frame->layer_renderers[j]->PrepareForBlitAsSource(&gpu_fence_fd);

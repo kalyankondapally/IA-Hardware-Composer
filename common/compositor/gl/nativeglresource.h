@@ -25,13 +25,14 @@
 namespace hwcomposer {
 
 struct OverlayLayer;
+class Renderer;
 
 class NativeGLResource : public NativeGpuResource {
  public:
   NativeGLResource() = default;
   ~NativeGLResource() override;
 
-  bool PrepareResources(const std::vector<OverlayBuffer*>& buffers) override;
+  bool PrepareResources(Renderer* renderer, const std::vector<OverlayBuffer*>& buffers) override;
   GpuResourceHandle GetResourceHandle(uint32_t layer_index) const override;
 
   void ReleaseGPUResources(const std::vector<ResourceHandle>& handles) override;

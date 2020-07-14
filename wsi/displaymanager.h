@@ -66,6 +66,8 @@ class DisplayManager {
 
   virtual uint32_t GetOffScreenFD() const = 0;
 
+  virtual uint32_t GetHybridOffScreenFD() const = 0;
+
   virtual NativeDisplay *CreateVirtualDisplay(uint32_t display_index) = 0;
   virtual void DestroyVirtualDisplay(uint32_t display_index) = 0;
 

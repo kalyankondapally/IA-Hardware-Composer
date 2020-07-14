@@ -93,6 +93,7 @@ class OverlayBuffer {
   virtual void SetOriginalHandle(HWCNativeHandle handle) = 0;
 
   virtual void SetDeviceResident(bool resident) = 0;
+  virtual bool IsDeviceResident() const = 0;
 
   virtual void Dump() = 0;
 };

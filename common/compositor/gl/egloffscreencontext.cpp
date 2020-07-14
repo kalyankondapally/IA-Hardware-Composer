@@ -32,7 +32,7 @@ EGLOffScreenContext::~EGLOffScreenContext() {
       ETRACE("Failed to destroy OpenGL ES Context.");
 }
 
-bool EGLOffScreenContext::Init() {
+bool EGLOffScreenContext::Init(bool hybrid_context) {
   EGLint num_configs;
   EGLConfig egl_config;
   static const EGLint context_attribs[] = {
@@ -42,7 +42,7 @@ bool EGLOffScreenContext::Init() {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  const EGLAttrib display_attrib[] = { EGL_DRM_MASTER_FD_EXT, GpuDevice::getInstance().GetOffScreenFD(), EGL_NONE };
+  const EGLAttrib display_attrib[] = { EGL_DRM_MASTER_FD_EXT, hybrid_context ? GpuDevice::getInstance().GetHybridOffScreenFD() : GpuDevice::getInstance().GetOffScreenFD(), EGL_NONE };
 
   egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, display_attrib);
 

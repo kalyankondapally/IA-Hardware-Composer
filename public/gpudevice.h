@@ -55,6 +55,8 @@ class GpuDevice : public HWCThread {
 
   uint32_t GetOffScreenFD() const;
 
+  uint32_t GetHybridOffScreenFD() const;
+
   NativeDisplay* GetDisplay(uint32_t display);
 
   NativeDisplay* CreateVirtualDisplay(uint32_t display_index);

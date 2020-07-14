@@ -26,7 +26,7 @@ class EGLOffScreenContext {
   EGLOffScreenContext();
   ~EGLOffScreenContext();
 
-  bool Init();
+  bool Init(bool hybrid_context);
 
   EGLint GetSyncFD(bool onScreen);
 

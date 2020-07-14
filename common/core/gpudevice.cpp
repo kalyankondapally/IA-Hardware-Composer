@@ -102,6 +102,10 @@ uint32_t GpuDevice::GetOffScreenFD() const {
   return display_manager_->GetOffScreenFD();
 }
 
+uint32_t GpuDevice::GetHybridOffScreenFD() const {
+  return display_manager_->GetHybridOffScreenFD();
+}
+
 NativeDisplay *GpuDevice::GetDisplay(uint32_t display_id) {
   if (total_displays_.size() > display_id)
     return total_displays_.at(display_id);

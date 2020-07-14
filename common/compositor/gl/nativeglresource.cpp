@@ -19,19 +19,37 @@
 #include "hwctrace.h"
 #include "overlaylayer.h"
 #include "shim.h"
+#include "renderer.h"
 
 namespace hwcomposer {
 
 bool NativeGLResource::PrepareResources(
-    const std::vector<OverlayBuffer*>& buffers) {
+    Renderer* renderer, const std::vector<OverlayBuffer*>& buffers) {
   std::vector<GpuResourceHandle>().swap(layer_textures_);
   layer_textures_.reserve(buffers.size());
-  EGLDisplay egl_display = eglGetCurrentDisplay();
+  EGLDisplay egl_display = nullptr;
+  bool context_changed = true;
+  bool buffer_resident = false;
   for (auto& buffer : buffers) {
     layer_textures_.emplace_back();
      GpuResourceHandle& resouce = layer_textures_.back();
     // Create EGLImage.
     if (buffer) {
+      if (!buffer_resident && buffer->IsDeviceResident()) {
+        renderer->MakePrimaryDeviceCurrent();
+        context_changed = true;
+        buffer_resident = true;
+      } else if (buffer_resident || context_changed) {
+        renderer->MakeSecondaryDeviceCurrent();
+        context_changed = true;
+        buffer_resident = false;
+      }
+
+      if (context_changed) {
+        egl_display = eglGetCurrentDisplay();
+        context_changed = false;
+      }
+
       const ResourceHandle& import_image =
           buffer->GetGpuResource(egl_display, true);
 

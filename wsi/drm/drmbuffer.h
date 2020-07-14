@@ -116,6 +116,10 @@ class DrmBuffer : public OverlayBuffer {
 
   void SetDeviceResident(bool resident) override;
 
+  bool IsDeviceResident() const override {
+    return device_resident_;
+  }
+
   void Dump() override;
 
  private:

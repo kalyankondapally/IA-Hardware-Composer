@@ -52,6 +52,7 @@ DrmDisplayManager::~DrmDisplayManager() {
   drmClose(fd_);
   close(fd_);
   close(offscreen_fd_);
+  close(offscreen_hybrid_fd_);
 }
 
 bool DrmDisplayManager::Initialize(int* scanout_device_no) {
@@ -204,6 +205,7 @@ void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no)
   drmDevicePtr devices[MAX_DRM_DEVICES], device;
   std::string card_path("/dev/dri/card0");
   int i, ret, num_devices, preferred_device = 0;
+  int preferred_hybrid_device_no = -1;
 
   num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
   if (num_devices < 0) {
@@ -236,6 +238,8 @@ void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no)
     // We assume Card0 is expected to drive Display
     if (std::string(device->nodes[drm_node]).compare(card_path) != 0) {
       ETRACE(" Found a device but not card0 skipping \n");
+      // Prefer this for hybrid device.
+      preferred_hybrid_device_no = i;
       continue;
     }
 
@@ -280,6 +284,24 @@ void DrmDisplayManager::InitializePreferredScanoutDevice(int* scanout_device_no)
    }
 
    PrintDeviceInfo(device, preferred_device, true);
+   if (preferred_hybrid_device_no == -1) {
+     // We dont have another device we can use. We will be using same device as primary.
+     offscreen_hybrid_fd_ = offscreen_fd_;
+   } else {
+        device = devices[preferred_hybrid_device_no];
+       // Check if this device has available render node.
+       if (device->available_nodes & 1 << drm_node) {
+         offscreen_hybrid_fd_ = open(device->nodes[drm_node], O_RDWR);
+        if (offscreen_hybrid_fd_ != -1)
+          fcntl(offscreen_hybrid_fd_, F_SETFD, fcntl(offscreen_hybrid_fd_, F_GETFD) | FD_CLOEXEC);
+
+        if (offscreen_hybrid_fd_ == -1 && errno == EACCES) {
+          ETRACE("Can't open GPU file for offscreen rendering with right permissions, falling back to Card Node %s \n", device->nodes[drm_node]);
+          offscreen_hybrid_fd_ = fd_;
+        }
+      }
+   }
+
    drmFreeDevices(devices, ret);
 }
 

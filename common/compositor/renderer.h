@@ -63,6 +63,12 @@ class Renderer {
 
   virtual void InsertFence(int32_t kms_fence) = 0;
 
+  virtual void MakePrimaryDeviceCurrent() {
+  }
+
+  virtual void MakeSecondaryDeviceCurrent() {
+  }
+
   virtual void SetDisableExplicitSync(bool disable_explicit_sync) = 0;
 };
 
