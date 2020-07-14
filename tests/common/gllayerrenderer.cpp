@@ -20,12 +20,30 @@
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
 
+#include <GLES2/gl2.h>
+#include <GLES3/gl3.h>
+
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#endif
+#ifndef GL_DRAW_FRAMEBUFFER
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#endif
+
 GLLayerRenderer::GLLayerRenderer(
     hwcomposer::NativeBufferHandler* buffer_handler, int device_no)
     : LayerRenderer(buffer_handler, device_no) {
 }
 
 GLLayerRenderer::~GLLayerRenderer() {
+  if (gl_blit_framebuffer_) {
+    glDeleteFramebuffers(1, &gl_blit_framebuffer_);
+  }
+
+  if (gl_blit_texture_id_) {
+    glDeleteTextures(1, &gl_blit_texture_id_);
+  }
+
   if (gl_)
     delete gl_;
   gl_ = NULL;
@@ -138,9 +156,12 @@ bool GLLayerRenderer::Init(uint32_t width, uint32_t height, uint32_t format,
     return false;
   }
 
-  glGenRenderbuffers(1, &gl_renderbuffer_);
-  glBindRenderbuffer(GL_RENDERBUFFER, gl_renderbuffer_);
-  gl_->glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, egl_image_);
+  glGenTextures(1, &gl_texture_);
+ // glBindRenderbuffer(GL_RENDERBUFFER, gl_renderbuffer_);
+  //gl_->glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, egl_image_);
+
+  glBindTexture(GL_TEXTURE_2D, gl_texture_);
+  gl_->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, egl_image_);
   if (glGetError() != GL_NO_ERROR) {
     printf("failed to create GL renderbuffer from EGLImage\n");
     return false;
@@ -148,8 +169,7 @@ bool GLLayerRenderer::Init(uint32_t width, uint32_t height, uint32_t format,
 
   glGenFramebuffers(1, &gl_framebuffer_);
   glBindFramebuffer(GL_FRAMEBUFFER, gl_framebuffer_);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            GL_RENDERBUFFER, gl_renderbuffer_);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl_texture_, 0);
 
   if (glGetError() != GL_NO_ERROR) {
     printf("failed to create GL framebuffer\n");
@@ -179,6 +199,106 @@ void GLLayerRenderer::Draw(int64_t* pfence) {
   gpu_fence_fd =
       gl_->eglDupNativeFenceFDANDROID(gl_->display, gpu_fence);
   gl_->eglDestroySyncKHR(gl_->display, gpu_fence);
+  assert(gpu_fence_fd != -1);
+#endif
+  *pfence = gpu_fence_fd;
+}
+
+void GLLayerRenderer::PrepareForBlitAsTarget() {
+    ETRACE("PrepareForBlitAsTarget called \n");
+    if (egl_blit_image_ == EGL_NO_IMAGE_KHR) {
+        ETRACE("EGL_NO_IMAGE_KHR  \n");
+        const EGLint image_attrs[] = {
+            EGL_WIDTH,                     (EGLint)width_,
+            EGL_HEIGHT,                    (EGLint)height_,
+            EGL_LINUX_DRM_FOURCC_EXT,      DRM_FORMAT_XRGB8888,
+            EGL_DMA_BUF_PLANE0_FD_EXT,     (EGLint)fd_,
+            EGL_DMA_BUF_PLANE0_PITCH_EXT,  (EGLint)stride_,
+            EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
+            EGL_NONE,
+        };
+        egl_blit_image_ = gl_->eglCreateImageKHR(eglGetCurrentDisplay(), EGL_NO_CONTEXT,
+                                            EGL_LINUX_DMA_BUF_EXT,
+                                            (EGLClientBuffer)NULL, image_attrs);
+    }
+
+  if (!gl_blit_framebuffer_) {
+      glGenFramebuffers(1, &gl_blit_framebuffer_);
+  }
+
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_blit_framebuffer_);
+
+  if (!gl_blit_texture_id_) {
+      glGenTextures(1, &gl_blit_texture_id_);
+  }
+
+  glBindTexture(GL_TEXTURE_2D, gl_blit_texture_id_);
+  gl_->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, egl_blit_image_);
+  glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl_blit_texture_id_, 0);
+  GLenum status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+  if (status != GL_FRAMEBUFFER_COMPLETE) {
+    switch (status) {
+      case (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT):
+        ETRACE("GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT.");
+        break;
+      case (GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT):
+        ETRACE("GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT.");
+        break;
+      case (GL_FRAMEBUFFER_UNSUPPORTED):
+        ETRACE("GL_FRAMEBUFFER_UNSUPPORTED.");
+        break;
+      default:
+        break;
+    }
+
+    ETRACE("GL Framebuffer is not complete %d.", gl_blit_framebuffer_);
+  }
+}
+
+void GLLayerRenderer::PrepareForBlitAsSource(int64_t* fence) {
+    if (*fence != -1) {
+      sync_wait(*fence, -1);
+      close(*fence);
+      *fence = -1;
+    }
+
+  eglMakeCurrent(gl_->display, EGL_NO_SURFACE, EGL_NO_SURFACE, gl_->context);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, gl_framebuffer_);
+  GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
+  if (status != GL_FRAMEBUFFER_COMPLETE) {
+    switch (status) {
+      case (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT):
+        ETRACE("GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT.");
+        break;
+      case (GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT):
+        ETRACE("GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT.");
+        break;
+      case (GL_FRAMEBUFFER_UNSUPPORTED):
+        ETRACE("GL_FRAMEBUFFER_UNSUPPORTED.");
+        break;
+      default:
+        break;
+    }
+
+    ETRACE("GL Framebuffer is not complete %d.", gl_framebuffer_);
+  }
+}
+
+void GLLayerRenderer::Blit(int64_t* pfence) {
+  glBlitFramebuffer(0, height_, width_, 0, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  int64_t gpu_fence_fd = -1;
+#ifndef DISABLE_EXPLICIT_SYNC
+  EGLint attrib_list[] = {
+      EGL_SYNC_NATIVE_FENCE_FD_ANDROID, EGL_NO_NATIVE_FENCE_FD_ANDROID,
+      EGL_NONE,
+  };
+  EGLSyncKHR gpu_fence = gl_->eglCreateSyncKHR(
+      eglGetCurrentDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, attrib_list);
+  assert(gpu_fence);
+
+  gpu_fence_fd =
+      gl_->eglDupNativeFenceFDANDROID(eglGetCurrentDisplay(),  gpu_fence);
+  gl_->eglDestroySyncKHR(eglGetCurrentDisplay(), gpu_fence);
   assert(gpu_fence_fd != -1);
 #endif
   *pfence = gpu_fence_fd;

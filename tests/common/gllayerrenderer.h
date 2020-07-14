@@ -31,12 +31,18 @@ class GLLayerRenderer : public LayerRenderer {
             uint32_t usage_format = -1, uint32_t usage = 0,
             glContext* gl = NULL, const char* resource_path = NULL) override;
   void Draw(int64_t* pfence) override;
+  void PrepareForBlitAsTarget() override;
+  void PrepareForBlitAsSource(int64_t* fence) override;
+  void Blit(int64_t* fence) override;
   virtual void glDrawFrame() = 0;
 
  protected:
   bool Init_GL(glContext* gl);
-  GLuint gl_renderbuffer_ = 0;
+  GLuint gl_texture_ = 0;
   GLuint gl_framebuffer_ = 0;
+  GLuint gl_blit_framebuffer_ = 0;
+  GLuint gl_blit_texture_id_ = 0;
+  EGLImageKHR egl_blit_image_ = EGL_NO_IMAGE_KHR;
   EGLImageKHR egl_image_ = EGL_NO_IMAGE_KHR;
   glContext* gl_ = NULL;
 };

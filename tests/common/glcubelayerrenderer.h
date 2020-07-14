@@ -49,6 +49,6 @@ class GLCubeLayerRenderer : public GLLayerRenderer {
   static const size_t s_length = 512;
   float last_progress_ = 0.f;
   bool even_turn_ = true;
-  bool enable_texture_ = false;
+  bool enable_texture_ = true;
 };
 #endif

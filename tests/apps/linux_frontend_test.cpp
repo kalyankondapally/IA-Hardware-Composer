@@ -213,6 +213,7 @@ struct frame {
   std::vector<iahwc_layer_t> layers;
   std::vector<gbm_bo *> layer_bos;
   std::vector<std::unique_ptr<LayerRenderer>> layer_renderers;
+  std::vector<std::unique_ptr<LayerRenderer>> scanout_renderer;
   std::vector<std::vector<uint32_t>> layers_fences;
   std::vector<int32_t> fences;
   int kms_fence = -1;
@@ -585,6 +586,18 @@ static void init_frames(int32_t width, int32_t height, struct device_info* rende
       frame->layers.push_back(layer_handle_);
       frame->layer_renderers.push_back(
           std::unique_ptr<LayerRenderer>(renderer));
+
+          LayerRenderer *scanout = new GLCubeLayerRenderer(scanout_device->buffer_handler, false, scanout_device->device_no);
+          if (!scanout->Init(layer_parameter.source_width,
+                              layer_parameter.source_height, gbm_format, usage_format,
+                              usage, &scanout_device->gl, layer_parameter.resource_path.c_str())) {
+            printf("scanout_device init not successful \n");
+            exit(-1);
+          }
+
+      frame->scanout_renderer.push_back(
+          std::unique_ptr<LayerRenderer>(scanout));
+
       gbm_handle *buffer_handle_ = renderer->GetNativeBoHandle();
       frame->layer_bos.push_back(buffer_handle_->bo);
     }
@@ -1145,8 +1158,30 @@ int main(int argc, char *argv[]) {
     for (uint32_t j = 0; j < frame->layers.size(); j++) {
       frame->layers_fences[j].clear();
       frame->layer_renderers[j]->Draw(&gpu_fence_fd);
-      backend->iahwc_layer_set_acquire_fence(iahwc_device, 0, frame->layers[j],
+      // Make this buffer resident on scanout device in case we are using different device
+      if (frame->layer_renderers[j]->GetDeviceNo() != preferred_scanout_device) {
+          ETRACE("blitting on client side \n");
+          // Setup source
+          frame->layer_renderers[j]->PrepareForBlitAsSource(&gpu_fence_fd);
+
+          // Set up target
+          frame->scanout_renderer[j]->PrepareForBlitAsTarget();
+
+          // Do the actual blit
+          frame->scanout_renderer[j]->Blit(&gpu_fence_fd);
+          gbm_handle *buffer_handle = frame->scanout_renderer[j]->GetNativeBoHandle();
+
+          backend->iahwc_layer_set_acquire_fence(iahwc_device, 0, frame->layers[j],
+                                               gpu_fence_fd);
+          backend->iahwc_layer_set_bo(iahwc_device, 0, frame->layers[j],
+                                      buffer_handle->bo, frame->scanout_renderer[j]->GetDeviceNo());
+      } else {
+        backend->iahwc_layer_set_acquire_fence(iahwc_device, 0, frame->layers[j],
                                              gpu_fence_fd);
+        backend->iahwc_layer_set_bo(iahwc_device, 0, frame->layers[j],
+                                    frame->layer_bos[j], frame->layer_renderers[j]->GetDeviceNo());
+      }
+
       iahwc_region_t damage_region;
       damage_region.numRects = 1;
       iahwc_rect_t *rect = new iahwc_rect_t[1];
@@ -1155,8 +1190,6 @@ int main(int argc, char *argv[]) {
       damage_region.rects = rect;
       backend->iahwc_layer_set_surface_damage(iahwc_device, 0, frame->layers[j],
                                               damage_region);
-      backend->iahwc_layer_set_bo(iahwc_device, 0, frame->layers[j],
-                                  frame->layer_bos[j], frame->layer_renderers[j]->GetDeviceNo());
     }
 
     backend->iahwc_present_display(iahwc_device, 0, &frame->kms_fence);
