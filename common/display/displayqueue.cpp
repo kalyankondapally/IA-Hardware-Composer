@@ -374,7 +374,6 @@ bool DisplayQueue::AssignAndCommitPlanes(
   if (render_layers) {
     compositor_.BeginFrame(disable_explictsync);
     // Prepare for final composition.
-    ETRACE("Draw called \n");
     if (!compositor_.Draw(current_composition_planes, layers)) {
       ETRACE("Failed to prepare for the frame composition. ");
       composition_passed = false;
@@ -569,7 +568,7 @@ bool DisplayQueue::QueueUpdate(std::vector<HwcLayer*>& source_layers,
   if (call_back) {
     call_back->Synchronize();
   }
-  ETRACE("AssignAndCommitPlanes called %d \n", validate_layers);
+
   return AssignAndCommitPlanes(
       layers, &source_layers, validate_layers, re_validate_begin,
       force_media_composition && requested_video_effect, retire_fence,

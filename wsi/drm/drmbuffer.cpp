@@ -267,8 +267,6 @@ const ResourceHandle& DrmBuffer::GetGpuResource(GpuDisplay egl_display,
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target,
                            image_.texture_, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  }  {
-    ETRACE("Skipped Binding device_resident_ %d fd: %d external_import %d \n", device_resident_, image_.fb_, external_import);
   }
 
   glBindTexture(target, 0);

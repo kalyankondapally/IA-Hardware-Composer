@@ -179,6 +179,10 @@ static bool scanout_is_intel_gpu = false;
  */
 static int preferred_scanout_device = -1;
 
+/*Enable App side migration to scanout device.
+ */
+static uint32_t enable_app_blit = 0;
+
 
 /*flag set to test displaymode*/
 static int display_mode;
@@ -609,7 +613,8 @@ static void print_help(void) {
       "usage: testjsonlayers [-h|--help] [-f|--frames <frames>] [-j|--json "
       "<jsonfile>] [-p|--powermode <on/off/doze/dozesuspend>][--displaymode "
       "<print/forcemode displayconfigindex] [-r|--hybrid_mode_3d <option[0 or 1]>] "
-      "[-m|--hybrid_mode_media <option[0 or 1]>] [-d|--force_disable_hybrid_mode <option[0 or 1]>] \n");
+      "[-m|--hybrid_mode_media <option[0 or 1]>] [-d|--force_disable_hybrid_mode <option[0 or 1]>] \n"
+      "[-b|--enable_app_blit <option[0 or 1]>]");
 }
 
 static void parse_args(int argc, char *argv[]) {
@@ -617,6 +622,7 @@ static void parse_args(int argc, char *argv[]) {
       {"help", no_argument, NULL, 'h'},
       {"frames", required_argument, NULL, 'f'},
       {"hybrid_mode_3d", required_argument, NULL, 'r'},
+      {"enable_app_blit", required_argument, NULL, 'b'},
       {"hybrid_mode_media", required_argument, NULL, 'm'},
       {"force_disable_hybrid_mode", required_argument, NULL, 'd'},
       {"json", required_argument, NULL, 'j'},
@@ -633,7 +639,7 @@ static void parse_args(int argc, char *argv[]) {
   /* Suppress getopt's poor error messages */
   opterr = 0;
 
-  while ((opt = getopt_long(argc, argv, "+:hf:r:m:d:s:j:l:", longopts,
+  while ((opt = getopt_long(argc, argv, "+:hf:r:m:d:b:s:j:l:", longopts,
                             /*longindex*/ &longindex)) != -1) {
     switch (opt) {
       case 0:
@@ -671,6 +677,31 @@ static void parse_args(int argc, char *argv[]) {
       }
       break;
     case 'm':
+      if (strlen(optarg) > 1) {
+        printf("Pass 1 to enable Hybrid Mode for Media or 0 to disable it!\n");
+        exit(0);
+      }
+      printf("Preferred Hybrid Mode for Media:%s\n", optarg);
+      errno = 0;
+      hybrid_mode_media = strtoul(optarg, &endptr, 0);
+      if (errno || *endptr != '\0') {
+        fprintf(stderr, "usage error: invalid value for <hybrid_mode_media>\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
+    case 'b':
+      if (strlen(optarg) > 1) {
+        printf("Pass 1 to enable Application side device migration or 0 to disable it!\n");
+        exit(0);
+      }
+      printf("Preferred Hybrid Mode for Media and 3D:%s\n", optarg);
+      errno = 0;
+      enable_app_blit = strtoul(optarg, &endptr, 0);
+      if (errno || *endptr != '\0') {
+        fprintf(stderr, "usage error: invalid value for <enable_app_blit>\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
       if (strlen(optarg) > 1) {
         printf("Pass 1 to enable Hybrid Mode for Media or 0 to disable it!\n");
         exit(0);
@@ -1147,7 +1178,6 @@ int main(int argc, char *argv[]) {
   int64_t gpu_fence_fd = -1; /* out-fence from gpu, in-fence to kms */
   uint32_t frame_total = 0;
   uint32_t in_use_frame = 0;
-  bool disable_app_blit = true;
   for (uint64_t i = 0; arg_frames == 0 || i < arg_frames; ++i) {
     struct frame *frame = &frames[in_use_frame];
     if (frame->kms_fence != -1) {
@@ -1160,7 +1190,7 @@ int main(int argc, char *argv[]) {
       frame->layers_fences[j].clear();
       frame->layer_renderers[j]->Draw(&gpu_fence_fd);
       // Make this buffer resident on scanout device in case we are using different device
-      if (!disable_app_blit && (frame->layer_renderers[j]->GetDeviceNo() != preferred_scanout_device)) {
+      if (enable_app_blit && (frame->layer_renderers[j]->GetDeviceNo() != preferred_scanout_device)) {
           ETRACE("blitting on client side \n");
           // Setup source
           frame->layer_renderers[j]->PrepareForBlitAsSource(&gpu_fence_fd);

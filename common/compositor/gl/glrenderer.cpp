@@ -169,7 +169,6 @@ bool GLRenderer::Draw(const std::vector<RenderState> &render_states,
       for (unsigned src_index = 0; src_index < size; src_index++) {
         const RenderState::LayerState &src = state.layer_state_[src_index];
         glBindFramebuffer(GL_READ_FRAMEBUFFER, src.handle_.fb_);
-        ETRACE("USing FrameBuffer Blit %d \n", src.handle_.fb_);
         GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE) {
           switch (status) {
