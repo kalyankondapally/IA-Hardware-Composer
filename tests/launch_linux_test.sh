@@ -1,4 +1,4 @@
-sudo EGL_LOG_LEVEL=debug MESA_DEBUG=1 LD_LIBRARY_PATH=/home/kalyan/install-kms/lib/:/home/kalyan/install-kms/lib/x86_64-linux-gnu ./linux_test -f 50 -j ./jsonconfigs/kmscube1layer.json  >& log.txt
+sudo EGL_LOG_LEVEL=debug MESA_DEBUG=1 LD_LIBRARY_PATH=/home/kalyan/install-kms/lib/:/home/kalyan/install-kms/lib/x86_64-linux-gnu ./linux_test -f 500 -j ./jsonconfigs/kmscube1layer.json  >& log.txt
 
 #video1layer_nv12.json
 # By default we use hybrid mode for all layers if more than 1 intel gpu are available on the system. Note that individual layer settings can over ride if that layer want's to be
