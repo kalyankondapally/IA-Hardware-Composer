@@ -232,9 +232,6 @@ std::string device_path;
 };
 
 bool init_gl(glContext* gl, const std::string& preferred_device_file) {
-    PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
-    PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
-
 #define get_proc(name, proc)                  \
   do {                                        \
     gl->name = (proc)eglGetProcAddress(#name); \
@@ -265,54 +262,52 @@ bool init_gl(glContext* gl, const std::string& preferred_device_file) {
   std::vector<EGLDeviceEXT> devices(DRM_MAX_MINOR, EGL_NO_DEVICE_EXT);
   EGLDeviceEXT opened_device = EGL_NO_DEVICE_EXT;
   EGLint num_devices = 0;
-
-  eglQueryDevicesEXT(DRM_MAX_MINOR, devices.data(), &num_devices);
+  gl->eglQueryDevicesEXT(DRM_MAX_MINOR, devices.data(), &num_devices);
   devices.resize(num_devices);
   for (EGLDeviceEXT device : devices) {
     const char* filename =
-        eglQueryDeviceStringEXT(device, EGL_DRM_DEVICE_FILE_EXT);
+        gl->eglQueryDeviceStringEXT(device, EGL_DRM_DEVICE_FILE_EXT);
     if (!filename)  // Not a DRM device.
       continue;
 
-    ETRACE("preferred_render_device %s ", filename);
     if (preferred_device_file.compare(filename) != 0)
       continue;
 
     opened_device = device;
+    break;
   }
 
   if (opened_device != EGL_NO_DEVICE_EXT) {
-    gl->display = reinterpret_cast<EGLNativeDisplayType>(opened_device);
+    gl->display = eglGetPlatformDisplay(EGL_PLATFORM_DEVICE_EXT, opened_device, NULL);
   } else {
     gl->display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
   }
 
-
-  if (!eglInitialize(gl->display, &major, &minor)) {
-    printf("failed to initialize EGL\n");
+  if (!eglInitialize(gl->display, NULL, NULL)) {
+    ETRACE("failed to initialize EGL\n");
     return false;
   }
 
 
-  printf("Using display %p with EGL version %d.%d\n", gl->display, major, minor);
+  ETRACE("Using display %p with EGL version %d.%d\n", gl->display, major, minor);
 
-  printf("EGL Version \"%s\"\n", eglQueryString(gl->display, EGL_VERSION));
-  printf("EGL Vendor \"%s\"\n", eglQueryString(gl->display, EGL_VENDOR));
-  printf("EGL Extensions \"%s\"\n", eglQueryString(gl->display, EGL_EXTENSIONS));
+  ETRACE("EGL Version \"%s\"\n", eglQueryString(gl->display, EGL_VERSION));
+  ETRACE("EGL Vendor \"%s\"\n", eglQueryString(gl->display, EGL_VENDOR));
+  ETRACE("EGL Extensions \"%s\"\n", eglQueryString(gl->display, EGL_EXTENSIONS));
 
   if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-    printf("failed to bind api EGL_OPENGL_ES_API\n");
+    ETRACE("failed to bind api EGL_OPENGL_ES_API\n");
     return false;
   }
   if (!eglChooseConfig(gl->display, config_attribs, &gl->config, 1, &n) ||
       n != 1) {
-    printf("failed to choose config: %d\n", n);
+    ETRACE("failed to choose config: %d\n", n);
     return false;
   }
   gl->context =
       eglCreateContext(gl->display, gl->config, EGL_NO_CONTEXT, context_attribs);
   if (gl->context == NULL) {
-    printf("failed to create context\n");
+    ETRACE("failed to create context\n");
     return false;
   }
   return true;
@@ -1019,11 +1014,14 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
    }
 
    device = devices[preferred_offscreen_3d_device];
+     ETRACE("populate_node_info called \n");
    populate_node_info(render_device, device, preferred_offscreen_3d_device);
+   ETRACE("populate_node_info done \n");
    if (!init_gl(&render_device->gl,  render_device->device_path)) {
      printf("Failed to initial EGLContext for Offscreen 3D Rendering");
      exit(-1);
    }
+   ETRACE("init_gl done \n");
 
    printf("Choose the following for Offscreen 3D Rendering:");
    print_device_info(device, preferred_offscreen_3d_device, false);
@@ -1096,7 +1094,7 @@ int main(int argc, char *argv[]) {
   render_device = new device_info;
   media_device = new device_info;
   scanout_device = new device_info;
-
+  ETRACE("finalize_preferred_devices called \n");
   finalize_preferred_devices(render_device, media_device, scanout_device);
   ETRACE("Hybrid Configuration: \n");
   if (hybrid_mode_3d) {

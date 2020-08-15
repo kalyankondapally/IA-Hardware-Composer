@@ -54,15 +54,16 @@ bool EGLOffScreenContext::Init(bool hybrid_context) {
     if (!filename)  // Not a DRM device.
       continue;
 
-    ETRACE("preferred_render_device %s ", filename);
+    ETRACE("preferred_render_device offscreen %s ", filename);
     if (GpuDevice::getInstance().GetSecondaryDeviceFileName().compare(filename) != 0)
       continue;
 
     opened_device = device;
+    break;
   }
 
   if (opened_device != EGL_NO_DEVICE_EXT) {
-    egl_display_ = reinterpret_cast<EGLNativeDisplayType>(opened_device);
+    egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_DEVICE_EXT, opened_device, NULL);
   } else {
     egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
   }
