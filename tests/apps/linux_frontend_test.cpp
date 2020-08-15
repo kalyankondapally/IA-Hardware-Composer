@@ -228,9 +228,12 @@ hwcomposer::NativeBufferHandler *buffer_handler = NULL;
 glContext gl;
 uint32_t is_discrete = false;
 uint32_t device_no = 0;
+std::string device_path;
 };
 
-bool init_gl(glContext* gl, int device_fd) {
+bool init_gl(glContext* gl, const std::string& preferred_device_file) {
+    PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
+    PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
 
 #define get_proc(name, proc)                  \
   do {                                        \
@@ -247,7 +250,10 @@ bool init_gl(glContext* gl, int device_fd) {
   get_proc(eglDupNativeFenceFDANDROID, PFNEGLDUPNATIVEFENCEFDANDROIDPROC);
   get_proc(glEGLImageTargetTexture2DOES, PFNGLEGLIMAGETARGETTEXTURE2DOESPROC);
   get_proc(eglDestroyImageKHR, PFNEGLDESTROYIMAGEKHRPROC);
+  get_proc(eglQueryDevicesEXT, PFNEGLQUERYDEVICESEXTPROC);
+  get_proc(eglQueryDeviceStringEXT, PFNEGLQUERYDEVICESTRINGEXTPROC);
   get_proc(eglGetPlatformDisplay, PFNEGLGETPLATFORMDISPLAYPROC);
+
 
   EGLint major, minor, n;
   static const EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3,
@@ -256,9 +262,30 @@ bool init_gl(glContext* gl, int device_fd) {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  const EGLAttrib display_attrib[] = { EGL_DRM_MASTER_FD_EXT, device_fd, EGL_NONE };
+  std::vector<EGLDeviceEXT> devices(DRM_MAX_MINOR, EGL_NO_DEVICE_EXT);
+  EGLDeviceEXT opened_device = EGL_NO_DEVICE_EXT;
+  EGLint num_devices = 0;
 
-  gl->display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, display_attrib);
+  eglQueryDevicesEXT(DRM_MAX_MINOR, devices.data(), &num_devices);
+  devices.resize(num_devices);
+  for (EGLDeviceEXT device : devices) {
+    const char* filename =
+        eglQueryDeviceStringEXT(device, EGL_DRM_DEVICE_FILE_EXT);
+    if (!filename)  // Not a DRM device.
+      continue;
+
+    ETRACE("preferred_render_device %s ", filename);
+    if (preferred_device_file.compare(filename) != 0)
+      continue;
+
+    opened_device = device;
+  }
+
+  if (opened_device != EGL_NO_DEVICE_EXT) {
+    gl->display = reinterpret_cast<EGLNativeDisplayType>(opened_device);
+  } else {
+    gl->display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+  }
 
 
   if (!eglInitialize(gl->display, &major, &minor)) {
@@ -909,6 +936,8 @@ static void populate_node_info(struct device_info* device_info, drmDevicePtr dev
             printf(" Failed to create Buffer Handler for Render Node Device %s \n", device->nodes[drm_node]);
             exit(-1);
           }
+
+          device_info->device_path = device->nodes[DRM_NODE_PRIMARY];
 	}
 
         // We don't open CardO device to avoid any authentication issues on the Display Server Side.
@@ -991,7 +1020,7 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
 
    device = devices[preferred_offscreen_3d_device];
    populate_node_info(render_device, device, preferred_offscreen_3d_device);
-   if (!init_gl(&render_device->gl,  render_device->buffer_handler->GetFd())) {
+   if (!init_gl(&render_device->gl,  render_device->device_path)) {
      printf("Failed to initial EGLContext for Offscreen 3D Rendering");
      exit(-1);
    }
@@ -1017,7 +1046,7 @@ static void finalize_preferred_devices(struct device_info* render_device, struct
    // using that device.
    device = devices[preferred_scanout_device];
    populate_node_info(scanout_device, device, preferred_scanout_device);
-   if (!init_gl(&scanout_device->gl,  scanout_device->buffer_handler->GetFd())) {
+   if (!init_gl(&scanout_device->gl,  render_device->device_path)) {
      printf("Failed to initial EGLContext for Offscreen 3D Rendering");
      exit(-1);
    }

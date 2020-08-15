@@ -42,9 +42,30 @@ bool EGLOffScreenContext::Init(bool hybrid_context) {
   static const EGLint config_attribs[] = {EGL_SURFACE_TYPE, EGL_DONT_CARE,
                                           EGL_NONE};
 
-  const EGLAttrib display_attrib[] = { EGL_DRM_MASTER_FD_EXT, hybrid_context ? GpuDevice::getInstance().GetHybridOffScreenFD() : GpuDevice::getInstance().GetOffScreenFD(), EGL_NONE };
+  std::vector<EGLDeviceEXT> devices(DRM_MAX_MINOR, EGL_NO_DEVICE_EXT);
+  EGLDeviceEXT opened_device = EGL_NO_DEVICE_EXT;
+  EGLint num_devices = 0;
 
-  egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, display_attrib);
+  eglQueryDevicesEXT(DRM_MAX_MINOR, devices.data(), &num_devices);
+  devices.resize(num_devices);
+  for (EGLDeviceEXT device : devices) {
+    const char* filename =
+        eglQueryDeviceStringEXT(device, EGL_DRM_DEVICE_FILE_EXT);
+    if (!filename)  // Not a DRM device.
+      continue;
+
+    ETRACE("preferred_render_device %s ", filename);
+    if (GpuDevice::getInstance().GetSecondaryDeviceFileName().compare(filename) != 0)
+      continue;
+
+    opened_device = device;
+  }
+
+  if (opened_device != EGL_NO_DEVICE_EXT) {
+    egl_display_ = reinterpret_cast<EGLNativeDisplayType>(opened_device);
+  } else {
+    egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+  }
 
   if (egl_display_ == EGL_NO_DISPLAY) {
     ETRACE("Failed to get egl display");

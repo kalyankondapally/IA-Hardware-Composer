@@ -64,9 +64,7 @@ class DisplayManager {
   // Get FD associated with this DisplayManager.
   virtual uint32_t GetFD() const = 0;
 
-  virtual uint32_t GetOffScreenFD() const = 0;
-
-  virtual uint32_t GetHybridOffScreenFD() const = 0;
+  virtual const std::string& GetSecondaryDeviceFileName() const = 0;
 
   virtual NativeDisplay *CreateVirtualDisplay(uint32_t display_index) = 0;
   virtual void DestroyVirtualDisplay(uint32_t display_index) = 0;

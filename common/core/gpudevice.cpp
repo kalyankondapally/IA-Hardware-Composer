@@ -98,12 +98,8 @@ uint32_t GpuDevice::GetFD() const {
   return display_manager_->GetFD();
 }
 
-uint32_t GpuDevice::GetOffScreenFD() const {
-  return display_manager_->GetOffScreenFD();
-}
-
-uint32_t GpuDevice::GetHybridOffScreenFD() const {
-  return display_manager_->GetHybridOffScreenFD();
+const std::string& GpuDevice::GetSecondaryDeviceFileName() const {
+  return display_manager_->GetSecondaryDeviceFileName();
 }
 
 NativeDisplay *GpuDevice::GetDisplay(uint32_t display_id) {

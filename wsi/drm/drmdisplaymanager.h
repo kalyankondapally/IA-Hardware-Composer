@@ -85,12 +85,8 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
     return fd_;
   }
 
-  uint32_t GetOffScreenFD() const override {
-    return offscreen_fd_;
-  }
-
-  uint32_t GetHybridOffScreenFD() const override {
-    return offscreen_hybrid_fd_;
+  const std::string& GetSecondaryDeviceFileName() const override {
+    return secondary_device_file_name_;
   }
 
   void NotifyClientsOfDisplayChangeStatus();
@@ -128,8 +124,8 @@ class DrmDisplayManager : public HWCThread, public DisplayManager {
   GpuDevice &device_ = GpuDevice::getInstance();
   bool ignore_updates_ = false;
   int fd_ = -1;
-  int offscreen_fd_ = -1;
   int offscreen_hybrid_fd_ = -1;
+  std::string secondary_device_file_name_;
   uint32_t device_num_ = 0;
   int hotplug_fd_ = -1;
   bool notify_client_ = false;

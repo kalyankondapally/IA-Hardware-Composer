@@ -187,6 +187,8 @@ bool init_gl() {
   get_proc(eglDupNativeFenceFDANDROID, PFNEGLDUPNATIVEFENCEFDANDROIDPROC);
   get_proc(glEGLImageTargetTexture2DOES, PFNGLEGLIMAGETARGETTEXTURE2DOESPROC);
   get_proc(eglDestroyImageKHR, PFNEGLDESTROYIMAGEKHRPROC);
+  get_proc(eglQueryDevicesEXT, PFNEGLQUERYDEVICESEXTPROC);
+  get_proc(eglQueryDeviceStringEXT, PFNEGLQUERYDEVICESTRINGEXTPROC);
 
   printf("Using display %p with EGL version %d.%d\n", gl.display, major, minor);
 

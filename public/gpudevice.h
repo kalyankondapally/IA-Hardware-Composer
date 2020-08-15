@@ -53,9 +53,7 @@ class GpuDevice : public HWCThread {
 
   uint32_t GetFD() const;
 
-  uint32_t GetOffScreenFD() const;
-
-  uint32_t GetHybridOffScreenFD() const;
+  const std::string& GetSecondaryDeviceFileName() const;
 
   NativeDisplay* GetDisplay(uint32_t display);
 
